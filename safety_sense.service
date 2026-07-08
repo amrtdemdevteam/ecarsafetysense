@@ -1,0 +1,24 @@
+[Unit]
+Description=E-car Safety Sense — KURURU2 proximity alert
+After=dev-ttyAMA0.device
+Requires=dev-ttyAMA0.device
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/safety_sense
+
+ExecStart=/usr/bin/python3 /opt/safety_sense/safety_sense.py
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=safety_sense
+
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
