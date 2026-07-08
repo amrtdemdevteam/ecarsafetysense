@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Safety Sense Monitor
+Exec=lxterminal --title="Safety Sense — KURURU2" -e "journalctl -u safety_sense -f"
+X-GNOME-Autostart-enabled=true
