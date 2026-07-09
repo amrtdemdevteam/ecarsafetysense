@@ -412,9 +412,10 @@ def main():
 
         if health_status == "SENSOR_WARN":
             buzzer.set_alert("SENSOR_WARN")
-            logmgr.write({"event": "SENSOR_WARN",
-                          "bad_count": health.bad_count,
-                          "strength": strength})
+            if not health.is_warning or health.bad_count == HEALTH_FAIL_THRESH:
+                logmgr.write({"event": "SENSOR_WARN",
+                            "bad_count": health.bad_count,
+                            "strength": strength})
             continue
 
         if dist is None:
