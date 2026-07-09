@@ -46,7 +46,7 @@
   },
 
   "watchdog": {
-    "timeout_sec": 5.0,
+    "timeout_sec": 10.0,
     "_comment": "เพิ่มจาก 3 → 5 วิ เพราะ frame rate ลดเหลือ 10Hz"
   },
 

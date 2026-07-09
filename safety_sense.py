@@ -473,7 +473,9 @@ def main():
 
         if watchdog.is_triggered():
             buzzer.set_alert("SENSOR_FAIL")
-            logmgr.write({"event": "SENSOR_FAIL"})
+            if not getattr(watchdog, '_logged', False):
+                logmgr.write({"event": "SENSOR_FAIL"})
+                watchdog._logged = True
             continue
 
         if health_status == "SENSOR_WARN":
