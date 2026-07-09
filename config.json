@@ -3,6 +3,7 @@
 
   "uart": {
     "port": "/dev/ttyAMA0",
+    "_comment_port": "RPi5: GPIO14/15 = /dev/ttyAMA0 — ต้องมี enable_uart=1 และ dtoverlay=uart0-pi5 ใน /boot/firmware/config.txt",
     "baud": 115200
   },
 
@@ -24,27 +25,33 @@
     "freq_far_hz":  1.0,
     "freq_mid_hz":  3.0,
     "freq_near_hz": 8.0,
-    "_comment2": "ตัวอย่าง: 1→3→8 Hz  |  ลองเป็น 1→4→10 ก็ได้ถ้าอยากถี่กว่านี้",
-    "duty_cycle_pct": 50,
-    "_comment3": "duty_cycle = สัดส่วน on/off ต่อ 1 cycle (50 = สมมาตร)"
+    "duty_cycle_pct": 50
   },
 
   "sensor": {
-    "median_window":  5,
+    "median_window":  1,
     "min_dist_cm":    10,
     "max_dist_cm":    1200,
     "min_strength":   100,
-    "_comment_strength": "TFmini Plus strength < 100 = เลนส์สกปรก / ถูกบัง / สัญญาณอ่อน"
+    "frame_rate_hz":  10,
+    "_comment_rate": "TFmini Plus frame rate: 10, 20, 50, หรือ 100 Hz"
+  },
+
+  "filter": {
+    "_comment": "ป้องกัน zone กระโดดไปมา",
+    "hysteresis_frames": 3,
+    "_comment_hyst": "zone ต้องปรากฏติดกัน N frames ถึงจะ commit",
+    "min_hold_sec": 0.3,
+    "_comment_hold": "zone ต้องอยู่นาน X วิ ถึงจะเปลี่ยนได้ (ป้องกัน transient)"
   },
 
   "watchdog": {
-    "timeout_sec": 3.0,
-    "_comment": "ไม่ได้รับ frame ภายใน timeout_sec → SENSOR_FAIL (triple-beep)"
+    "timeout_sec": 5.0,
+    "_comment": "เพิ่มจาก 3 → 5 วิ เพราะ frame rate ลดเหลือ 10Hz"
   },
 
   "health": {
-    "fail_count_threshold": 5,
-    "_comment": "bad frame ติดกันกี่ครั้งถึง trigger SENSOR_WARN (double-beep)"
+    "fail_count_threshold": 5
   },
 
   "log": {

@@ -5,15 +5,10 @@ Hardware : Raspberry Pi 5
 Sensor   : TFmini Plus  UART TX→GPIO15 (RPi RX), RX→GPIO14 (RPi TX)
 Buzzer   : Active piezo via MOSFET → GPIO23
 
-Beep behaviour (แบบรถยนต์ถอยจอด):
-  dist > clear_cm  → เงียบ
-  far_cm..clear_cm → beep ที่ freq_far_hz   (ถี่ขึ้น linear ตามระยะ)
-  mid_cm..far_cm   → beep ที่ freq_mid_hz   (ถี่ขึ้น linear ตามระยะ)
-  near_cm..mid_cm  → beep ที่ freq_near_hz  (ถี่ขึ้น linear ตามระยะ)
-  dist < near_cm   → SOLID buzz ต่อเนื่อง
-
-NOTE: ใช้ lgpio แทน RPi.GPIO เพราะ RPi5 ใช้ RP1 chip
-      RPi.GPIO ไม่รองรับ RPi5
+Features:
+  1. Frame rate 10Hz  — ลด TFmini Plus จาก 100Hz → 10Hz
+  2. Hysteresis       — zone ต้องคงที่ N frames ติดกันถึงจะ commit
+  3. Min hold time    — zone ต้องอยู่นาน X วิ ถึงจะ log และเปลี่ยน buzzer
 """
 
 import json
@@ -61,9 +56,13 @@ MEDIAN_WINDOW    = CFG["sensor"]["median_window"]
 MIN_DIST_CM      = CFG["sensor"]["min_dist_cm"]
 MAX_DIST_CM      = CFG["sensor"]["max_dist_cm"]
 MIN_STRENGTH     = CFG["sensor"]["min_strength"]
+FRAME_RATE_HZ    = CFG["sensor"].get("frame_rate_hz", 10)
 
 WATCHDOG_TIMEOUT    = CFG["watchdog"]["timeout_sec"]
 HEALTH_FAIL_THRESH  = CFG["health"]["fail_count_threshold"]
+
+HYSTERESIS_FRAMES   = CFG.get("filter", {}).get("hysteresis_frames", 3)
+MIN_HOLD_SEC        = CFG.get("filter", {}).get("min_hold_sec", 0.3)
 
 LOG_DIR         = Path(CFG["log"]["dir"])
 LOG_MAX_MB      = CFG["log"]["max_mb"]
@@ -107,18 +106,14 @@ def interpolate_freq(dist_cm: int):
     """Returns Hz (float) or None = solid buzz."""
     if dist_cm > ZONE_CLEAR:
         return 0.0
-
     if dist_cm <= ZONE_NEAR:
         return None
-
     if dist_cm > ZONE_FAR:
         t = (ZONE_CLEAR - dist_cm) / max(ZONE_CLEAR - ZONE_FAR, 1)
         return FREQ_FAR * (1 + 0.3 * t)
-
     if dist_cm > ZONE_MID:
         t = (ZONE_FAR - dist_cm) / max(ZONE_FAR - ZONE_MID, 1)
         return FREQ_FAR + (FREQ_MID - FREQ_FAR) * t
-
     t = (ZONE_MID - dist_cm) / max(ZONE_MID - ZONE_NEAR, 1)
     return FREQ_MID + (FREQ_NEAR - FREQ_MID) * t
 
@@ -129,6 +124,64 @@ def zone_label(dist_cm: int) -> str:
     if dist_cm > ZONE_MID:   return "MID"
     if dist_cm > ZONE_NEAR:  return "NEAR"
     return "SOLID"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Zone filter — Hysteresis + Min hold time
+# ─────────────────────────────────────────────────────────────────────────────
+class ZoneFilter:
+    """
+    Zone จะถูก commit ก็ต่อเมื่อ:
+      1. zone เดิมปรากฏ hysteresis_frames ติดกัน (ป้องกัน noise)
+      2. zone อยู่นาน min_hold_sec วิ (ป้องกัน transient)
+
+    ผล: SOLID → CLEAR จะไม่มี FAR/MID แทรกกลาง
+    """
+
+    def __init__(self, hysteresis: int, min_hold: float):
+        self.hysteresis  = hysteresis
+        self.min_hold    = min_hold
+
+        self._candidate       = None   # zone ที่กำลังสะสม frames
+        self._candidate_count = 0      # จำนวน frames ติดกัน
+        self._committed       = None   # zone ที่ confirmed แล้ว
+        self._committed_since = 0.0    # เวลาที่ commit
+
+    def update(self, raw_zone: str) -> str | None:
+        """
+        ส่ง raw_zone เข้ามาทุก frame
+        คืน zone ที่ confirmed (ถ้ายังไม่ confirmed คืน None)
+        """
+        now = time.monotonic()
+
+        # สะสม hysteresis
+        if raw_zone == self._candidate:
+            self._candidate_count += 1
+        else:
+            self._candidate       = raw_zone
+            self._candidate_count = 1
+
+        # ยังไม่ครบ hysteresis
+        if self._candidate_count < self.hysteresis:
+            return None
+
+        # zone candidate ครบ hysteresis แล้ว
+        # ตรวจ min_hold: ถ้า committed เดิมอยู่ไม่ถึง min_hold ยังไม่เปลี่ยน
+        if raw_zone != self._committed:
+            if self._committed is not None:
+                held = now - self._committed_since
+                if held < self.min_hold:
+                    return None   # รอให้ zone เดิมอยู่ครบก่อน
+
+            # commit zone ใหม่
+            self._committed       = raw_zone
+            self._committed_since = now
+            return raw_zone
+
+        return None   # zone เดิม ไม่มีการเปลี่ยน
+
+    @property
+    def committed_zone(self) -> str | None:
+        return self._committed
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Log manager
@@ -153,7 +206,6 @@ class LogManager:
     def _purge(self):
         files = sorted(LOG_DIR.glob("*.log"))
         cutoff = datetime.now() - timedelta(days=LOG_RETAIN_DAYS)
-
         for f in files[:]:
             try:
                 if datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
@@ -161,7 +213,6 @@ class LogManager:
                     log.info(f"[Log] Deleted old: {f.name}")
             except Exception as e:
                 log.warning(f"[Log] Remove failed {f.name}: {e}")
-
         while files:
             total_mb = sum(f.stat().st_size for f in files if f.exists()) / 1_048_576
             if total_mb <= LOG_MAX_MB:
@@ -179,9 +230,28 @@ class LogManager:
 class TFminiPlus:
     HEADER = 0x59
 
+    # Frame rate command: 0x5A 0x06 0x03 <rate_L> <rate_H> <checksum>
+    FRAMERATE_CMD = {
+        10:  bytes([0x5A, 0x06, 0x03, 0x0A, 0x00, 0x6D]),
+        20:  bytes([0x5A, 0x06, 0x03, 0x14, 0x00, 0x77]),
+        50:  bytes([0x5A, 0x06, 0x03, 0x32, 0x00, 0x95]),
+        100: bytes([0x5A, 0x06, 0x03, 0x64, 0x00, 0xC7]),
+    }
+
     def __init__(self):
         self.ser = serial.Serial(UART_PORT, UART_BAUD, timeout=0.1)
         log.info(f"TFmini Plus on {UART_PORT} @ {UART_BAUD}")
+        self._set_framerate(FRAME_RATE_HZ)
+
+    def _set_framerate(self, hz: int):
+        cmd = self.FRAMERATE_CMD.get(hz)
+        if cmd:
+            self.ser.write(cmd)
+            time.sleep(0.1)
+            self.ser.flushInput()
+            log.info(f"TFmini Plus frame rate set to {hz} Hz")
+        else:
+            log.warning(f"Frame rate {hz}Hz not supported, using default 100Hz")
 
     def read(self):
         """Returns (dist_cm, strength) or (None, None)."""
@@ -317,22 +387,18 @@ class BuzzerController:
             if freq == self._SILENT:
                 gpio_write(0)
                 time.sleep(0.05)
-
             elif freq == self._SOLID:
                 gpio_write(1)
                 time.sleep(0.05)
-
             elif freq == self._WARN_PAT:
                 self._pulse(0.08)
                 self._pulse(0.08)
                 self._sleep_check(0.80)
-
             elif freq == self._FAIL_PAT:
                 self._pulse(0.07)
                 self._pulse(0.07)
                 self._pulse(0.07)
                 self._sleep_check(0.60)
-
             else:
                 half = 1.0 / (2.0 * max(freq, 0.1))
                 gpio_write(1)
@@ -377,6 +443,7 @@ def main():
     watchdog = Watchdog(WATCHDOG_TIMEOUT)
     health   = SensorHealth()
     logmgr   = LogManager()
+    zfilter  = ZoneFilter(HYSTERESIS_FRAMES, MIN_HOLD_SEC)
     samples  = []
 
     def shutdown(sig, frame):
@@ -394,8 +461,7 @@ def main():
         f"MID>{ZONE_MID}  NEAR>{ZONE_NEAR}  SOLID≤{ZONE_NEAR}"
     )
     log.info(f"Freq anchors: FAR={FREQ_FAR}Hz  MID={FREQ_MID}Hz  NEAR={FREQ_NEAR}Hz")
-
-    prev_zone = None
+    log.info(f"Filter: hysteresis={HYSTERESIS_FRAMES} frames  min_hold={MIN_HOLD_SEC}s  frame_rate={FRAME_RATE_HZ}Hz")
 
     while True:
         dist, strength = sensor.read()
@@ -414,37 +480,39 @@ def main():
             buzzer.set_alert("SENSOR_WARN")
             if not health.is_warning or health.bad_count == HEALTH_FAIL_THRESH:
                 logmgr.write({"event": "SENSOR_WARN",
-                            "bad_count": health.bad_count,
-                            "strength": strength})
+                              "bad_count": health.bad_count,
+                              "strength": strength})
             continue
 
         if dist is None:
             continue
 
+        # Rolling median filter
         samples.append(dist)
         if len(samples) > MEDIAN_WINDOW:
             samples.pop(0)
-
         filtered = rolling_median(samples)
-        zone     = zone_label(filtered)
-        freq     = interpolate_freq(filtered)
 
+        raw_zone = zone_label(filtered)
+
+        # Update buzzer immediately (ไม่รอ filter — buzzer ต้องตอบสนองทันที)
         buzzer.update(filtered)
 
-        
+        # Zone filter: hysteresis + min hold
+        confirmed_zone = zfilter.update(raw_zone)
 
-        if zone != prev_zone:
+        if confirmed_zone is not None:
+            freq = interpolate_freq(filtered)
             logmgr.write({
                 "dist":     filtered,
-                "zone":     zone,
+                "zone":     confirmed_zone,
                 "freq_hz":  round(freq, 2) if freq is not None else "SOLID",
                 "strength": strength,
             })
             log.info(
-                f"{filtered:4d} cm  str={strength:5d}  [{zone}]  "
+                f"{filtered:4d} cm  str={strength:5d}  [{confirmed_zone}]  "
                 f"freq={'SOLID' if freq is None else f'{freq:.1f}Hz'}"
             )
-            prev_zone = zone
 
 
 if __name__ == "__main__":
