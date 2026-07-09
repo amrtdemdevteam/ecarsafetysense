@@ -430,14 +430,15 @@ def main():
 
         buzzer.update(filtered)
 
-        logmgr.write({
-            "dist":     filtered,
-            "zone":     zone,
-            "freq_hz":  round(freq, 2) if freq is not None else "SOLID",
-            "strength": strength,
-        })
+        
 
         if zone != prev_zone:
+            logmgr.write({
+                "dist":     filtered,
+                "zone":     zone,
+                "freq_hz":  round(freq, 2) if freq is not None else "SOLID",
+                "strength": strength,
+            })
             log.info(
                 f"{filtered:4d} cm  str={strength:5d}  [{zone}]  "
                 f"freq={'SOLID' if freq is None else f'{freq:.1f}Hz'}"
