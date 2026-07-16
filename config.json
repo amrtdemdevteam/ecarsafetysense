@@ -22,9 +22,9 @@
 
   "buzzer": {
     "_comment": "3 ค่า Hz ที่ใช้เป็น anchor — ระหว่าง zone จะ interpolate เองอัตโนมัติ",
-    "freq_far_hz":  3.0,
-    "freq_mid_hz":  8.0,
-    "freq_near_hz": 8.0,
+    "freq_far_hz":  2.0,
+    "freq_mid_hz":  6.0,
+    "freq_near_hz": 6.0,
     "duty_cycle_pct": 50
   },
 
