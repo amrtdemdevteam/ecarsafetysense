@@ -278,6 +278,8 @@ class TFminiPlus:
             return None, None
 
         if not (MIN_DIST_CM <= dist <= MAX_DIST_CM):
+            if dist > MAX_DIST_CM:
+                return MAX_DIST_CM + 1, strength
             return None, None
 
         return dist, strength
@@ -327,6 +329,7 @@ class Watchdog:
             self._last_fed = time.monotonic()
             if self._triggered:
                 log.info("[Watchdog] Sensor recovered")
+                self._logged = False
             self._triggered = False
 
     def is_triggered(self) -> bool:
