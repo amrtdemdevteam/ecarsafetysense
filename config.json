@@ -32,7 +32,7 @@
     "median_window":  1,
     "min_dist_cm":    10,
     "max_dist_cm":    1200,
-    "min_strength":   100,
+    "min_strength":   0,
     "frame_rate_hz":  10,
     "_comment_rate": "TFmini Plus frame rate: 10, 20, 50, หรือ 100 Hz"
   },
@@ -51,7 +51,7 @@
   },
 
   "health": {
-    "fail_count_threshold": 5
+    "fail_count_threshold": 20
   },
 
   "log": {
