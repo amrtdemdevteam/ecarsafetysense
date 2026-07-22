@@ -279,7 +279,9 @@ class TFminiPlus:
 
         if not (MIN_DIST_CM <= dist <= MAX_DIST_CM):
             if dist > MAX_DIST_CM:
-                return MAX_DIST_CM + 1, strength
+                return MAX_DIST_CM + 1, strength  # ไกลเกิน = CLEAR
+            if dist == 0:
+                return MAX_DIST_CM + 1, strength  # ไม่มีเป้า = CLEAR
             return None, None
 
         return dist, strength
