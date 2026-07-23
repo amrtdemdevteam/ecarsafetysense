@@ -14,15 +14,15 @@
   "zones": {
     "_comment": "กำหนดขอบเขตของแต่ละ zone (cm) — ต้อง far > mid > near > 0",
     "clear_cm": 200,
-    "far_cm":   150,
-    "mid_cm":   100,
-    "near_cm":  100,
+    "far_cm":   155,
+    "mid_cm":   105,
+    "near_cm":  105,
     "_comment2": "far_cm=mid_cm ทำให้ MID zone หายไป → เหลือ 3 ระดับ"
   },
 
   "buzzer": {
     "_comment": "3 ค่า Hz ที่ใช้เป็น anchor — ระหว่าง zone จะ interpolate เองอัตโนมัติ",
-    "freq_far_hz":  3.0,
+    "freq_far_hz":  2.0,
     "freq_mid_hz":  6.0,
     "freq_near_hz": 6.0,
     "duty_cycle_pct": 50

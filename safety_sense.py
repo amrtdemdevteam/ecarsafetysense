@@ -103,19 +103,15 @@ def gpio_cleanup():
 # Frequency interpolator
 # ─────────────────────────────────────────────────────────────────────────────
 def interpolate_freq(dist_cm: int):
-    """Returns Hz (float) or None = solid buzz."""
+    """Returns Hz (float) or None = solid buzz.
+    Step function — ความถี่คงที่ตลอดทั้ง zone ไม่มีการไล่ค่า"""
     if dist_cm > ZONE_CLEAR:
-        return 0.0
+        return 0.0                # CLEAR — เงียบ
     if dist_cm <= ZONE_NEAR:
-        return None
+        return None                # SOLID
     if dist_cm > ZONE_FAR:
-        t = (ZONE_CLEAR - dist_cm) / max(ZONE_CLEAR - ZONE_FAR, 1)
-        return FREQ_FAR * (1 + 0.3 * t)
-    if dist_cm > ZONE_MID:
-        t = (ZONE_FAR - dist_cm) / max(ZONE_FAR - ZONE_MID, 1)
-        return FREQ_FAR + (FREQ_MID - FREQ_FAR) * t
-    t = (ZONE_MID - dist_cm) / max(ZONE_MID - ZONE_NEAR, 1)
-    return FREQ_MID + (FREQ_NEAR - FREQ_MID) * t
+        return FREQ_FAR             # FAR zone — คงที่
+    return FREQ_MID                 # MID zone — คงที่
 
 
 def zone_label(dist_cm: int) -> str:
