@@ -2,8 +2,8 @@
   "_comment": "E-car Safety Sense — KURURU2  |  แก้ค่าที่นี่แล้ว: sudo systemctl restart safety_sense",
 
   "uart": {
-    "port": "/dev/ttyAMA0",
-    "_comment_port": "RPi5: GPIO14/15 = /dev/ttyAMA0 — ต้องมี enable_uart=1 และ dtoverlay=uart0-pi5 ใน /boot/firmware/config.txt",
+    "port": "/dev/serial0",
+    "_comment_port": "ใช้ stable UART alias /dev/serial0 เพื่อรองรับ Raspberry Pi 4 และ Raspberry Pi 5 (GPIO14 TX / GPIO15 RX)",
     "baud": 115200
   },
 
@@ -17,7 +17,7 @@
     "far_cm":   155,
     "mid_cm":   105,
     "near_cm":  105,
-    "_comment2": "far_cm=mid_cm ทำให้ MID zone หายไป → เหลือ 3 ระดับ"
+    "_comment2": "near_cm=mid_cm ทำให้ NEAR zone หายไป → เหลือ 3 ระดับ"
   },
 
   "buzzer": {

@@ -1,7 +1,7 @@
 # E-car Safety Sense — KURURU2
 ## Codebase Context for GitHub Copilot
 
-> **วันที่อัปเดต:** 18 กรกฎาคม 2026  
+> **วันที่อัปเดต:** 9 กันยายน 2026
 > **Repository:** https://github.com/amrtdemdevteam/ecarsafetysense  
 > **Status:** Pilot — ติดตั้งบนรถคันแรก ทดสอบในโรงงานจริงแล้ว  
 
@@ -11,7 +11,7 @@
 
 ระบบ **Forward Proximity Alert** สำหรับรถลากไฟฟ้า (Electric Towing Tractor) รุ่น KURURU2 ในโกดัง
 
-**หลักการ:** Sensor วัดระยะสิ่งกีดขวางด้านหน้า → Raspberry Pi 5 ประมวลผล → Buzzer เตือนผู้ขับด้วยความถี่ที่ถี่ขึ้นตามระยะที่ใกล้ขึ้น (เหมือนเซนเซอร์ถอยจอดรถยนต์)
+**หลักการ:** Sensor วัดระยะสิ่งกีดขวางด้านหน้า → Raspberry Pi 4 หรือ Raspberry Pi 5 ประมวลผล → Buzzer เตือนผู้ขับด้วยความถี่ที่ถี่ขึ้นตามระยะที่ใกล้ขึ้น (เหมือนเซนเซอร์ถอยจอดรถยนต์)
 
 **ขอบเขตสำคัญ:**
 - เป็นระบบ **operator alert เท่านั้น** — ไม่ใช่ safety-rated auto-stop
@@ -54,7 +54,7 @@ E-car 26V ACC
 - `GND_DRI` = ฝั่งรถ (ก่อน Mornsun) — ห้ามต่อข้ามฝั่ง
 - `GND_CON` = ฝั่งวงจร (หลัง Mornsun) — ทุก device ต้องใช้จุดนี้ร่วมกัน
 
-### GPIO Pinout (RPi5)
+### GPIO Pinout (Raspberry Pi 4 / Raspberry Pi 5)
 ```
 Pin 2  (5V)      → TFmini Plus VCC (สายแดง)
 Pin 6  (GND)     → GND_CON
@@ -83,7 +83,7 @@ ecarsafetysense/
 pip install pyserial lgpio --break-system-packages
 ```
 - `pyserial` — อ่าน UART จาก TFmini Plus
-- `lgpio` — GPIO สำหรับ RPi5 (RPi.GPIO ใช้ไม่ได้กับ RP1 chip ของ RPi5)
+- `lgpio` — GPIO API ชุดเดียวสำหรับ Raspberry Pi 4 และ Raspberry Pi 5
 
 ---
 
@@ -92,7 +92,7 @@ pip install pyserial lgpio --break-system-packages
 ```json
 {
   "uart": {
-    "port": "/dev/ttyAMA0",
+    "port": "/dev/serial0",
     "baud": 115200
   },
   "pins": {
@@ -100,12 +100,12 @@ pip install pyserial lgpio --break-system-packages
   },
   "zones": {
     "clear_cm": 200,
-    "far_cm":   150,
-    "mid_cm":   100,
-    "near_cm":  100
+    "far_cm":   155,
+    "mid_cm":   105,
+    "near_cm":  105
   },
   "buzzer": {
-    "freq_far_hz":  3.0,
+    "freq_far_hz":  2.0,
     "freq_mid_hz":  6.0,
     "freq_near_hz": 6.0,
     "duty_cycle_pct": 50
@@ -174,7 +174,7 @@ _gpio_handle = lgpio.gpiochip_open(0)
 lgpio.gpio_claim_output(_gpio_handle, PIN_BUZZER, 0)  # GPIO23, initial LOW
 lgpio.gpio_write(_gpio_handle, PIN_BUZZER, 1)          # HIGH = buzzer ON
 ```
-⚠️ **ต้องใช้ lgpio เท่านั้น** — RPi.GPIO ทำงานไม่ได้บน RPi5 (RP1 chip)
+ใช้ `lgpio` เพื่อให้ codebase เดียวทำงานกับ Raspberry Pi 4 และ Raspberry Pi 5; ไม่เปลี่ยนเป็น RPi.GPIO
 
 ### 6.3 interpolate_freq(dist_cm) → float | None
 ```python
@@ -276,29 +276,25 @@ while True:
 
 ---
 
-## 7. RPi5 UART Setup (สำคัญมาก)
+## 7. Raspberry Pi 4 / Raspberry Pi 5 UART Setup
 
-RPi5 ใช้ chip **RP1** ซึ่งต่างจาก RPi4 อย่างสิ้นเชิง
+Runtime ใช้ stable alias `/dev/serial0` เพื่อให้ระบบไม่ผูกกับชื่อ tty ภายในของ Raspberry Pi แต่ละรุ่นหรือ Raspberry Pi OS แต่ละ release ตัว installer ไม่แก้ `/boot/config.txt` หรือ `/boot/firmware/config.txt` อัตโนมัติ
 
-### `/boot/firmware/config.txt`
-```ini
-enable_uart=1
-dtoverlay=uart0-pi5
-# ⛔ ห้ามมี: dtparam=uart0=on หรือ dtoverlay=uart0
-```
+บน Raspberry Pi 5 บาง configuration, `serial0` ชี้ไปที่ dedicated debug header หาก installer ตรวจพบกรณีนี้จะหยุดก่อนเปลี่ยนระบบ ให้เพิ่ม `dtparam=uart0_console=on` ใน config file ที่มีอยู่ตาม path ที่ installer แสดง แล้ว reboot เพื่อ map `serial0` มาที่ GPIO14/15
 
 ### ปิด Serial Login Shell
 ```bash
 sudo raspi-config
 # Interface Options → Serial Port
-# Login shell: No | Hardware: Yes
+# Login shell over serial: No
+# Serial hardware: Yes
+# จากนั้น reboot
 ```
 
 ### ตรวจสอบ
 ```bash
-ls -la /dev/serial*
-# ต้องได้: /dev/serial0 -> ttyAMA0  ✅
-# ถ้าได้:  /dev/serial0 -> ttyAMA10 ❌ (ยังไม่ได้ตั้ง overlay)
+ls -l /dev/serial0
+# ต้องมี /dev/serial0; target ภายในอาจต่างกันตามรุ่นและ OS
 ```
 
 ---
@@ -364,8 +360,8 @@ sudo systemctl stop/start safety_sense  # หยุด/เริ่ม
 |---|---|---|---|
 | 1 | MOSFET พัง 2 ครั้ง | ขาด flyback diode 1N4007 ขนาน buzzer | เพิ่ม 1N4007, เปลี่ยน MOSFET เป็น RX1L08BGNC10 (60V) |
 | 2 | Cap 220µF/10V พัง | LM2596 ยังไม่ปรับ → output 20V | เปลี่ยนเป็น 220µF/50V |
-| 3 | RPi.GPIO crash | RPi5 ใช้ RP1 chip ไม่รองรับ | เปลี่ยนเป็น lgpio |
-| 4 | UART อ่านไม่ได้ | serial console ครอง UART / port map ผิด | raspi-config ปิด login shell + dtoverlay=uart0-pi5 |
+| 3 | RPi.GPIO crash | RPi5 ใช้ RP1 chip ไม่รองรับ | ใช้ lgpio สำหรับทั้ง Pi 4 และ Pi 5 |
+| 4 | UART อ่านไม่ได้ | serial console ครอง UART / port map ผิด | raspi-config ปิด login shell, เปิด serial hardware, ใช้ `/dev/serial0` |
 | 5 | GND ไม่ร่วม → buzzer ไม่ดัง | ทดสอบด้วย power bank แยก | ต่อ RPi Pin6 → GND_CON |
 | 6 | Voltage drop 26V→16V | จั๊มไฟจากสายสัญญาณ (กระแสน้อย) | เปลี่ยนจุดจั๊ม + connector XT30 |
 | 7 | SENSOR_WARN บ่อย (false) | min_strength=100 แต่ค่าจริงแกว่ง / แดด IR | min_strength=0, fail_count_threshold=999999 |

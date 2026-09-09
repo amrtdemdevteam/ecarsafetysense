@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 E-car Safety Sense — KURURU2
-Hardware : Raspberry Pi 5
+Hardware : Raspberry Pi 4 or Raspberry Pi 5
 Sensor   : TFmini Plus  UART TX→GPIO15 (RPi RX), RX→GPIO14 (RPi TX)
 Buzzer   : Active piezo via MOSFET → GPIO23
 
@@ -79,6 +79,25 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger("safety_sense")
+
+
+def log_platform_info():
+    """Log platform and configured hardware without making startup depend on it."""
+    model_path = Path("/proc/device-tree/model")
+    try:
+        model = model_path.read_text(encoding="utf-8").rstrip("\x00\n")
+    except (OSError, UnicodeError) as exc:
+        model = f"unavailable ({exc})"
+
+    try:
+        resolved_uart = str(Path(UART_PORT).resolve(strict=True))
+    except OSError as exc:
+        resolved_uart = f"unavailable ({exc})"
+
+    log.info(f"Raspberry Pi model: {model}")
+    log.info(f"Configured UART: {UART_PORT}")
+    log.info(f"Resolved UART target: {resolved_uart}")
+    log.info(f"Buzzer GPIO: {PIN_BUZZER}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GPIO handle (lgpio)
@@ -438,8 +457,17 @@ def rolling_median(buf: list) -> int:
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
-    gpio_init()
-    sensor   = TFminiPlus()
+    log.info("=== Safety Sense starting ===")
+    log_platform_info()
+
+    try:
+        gpio_init()
+        sensor = TFminiPlus()
+    except (OSError, serial.SerialException) as exc:
+        log.error(f"Hardware initialization failed: {exc}")
+        gpio_cleanup()
+        sys.exit(1)
+
     buzzer   = BuzzerController()
     watchdog = Watchdog(WATCHDOG_TIMEOUT)
     health   = SensorHealth()

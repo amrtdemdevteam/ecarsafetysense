@@ -1,7 +1,6 @@
 [Unit]
 Description=E-car Safety Sense — KURURU2 proximity alert
-After=dev-ttyAMA0.device
-Requires=dev-ttyAMA0.device
+After=local-fs.target
 
 [Service]
 Type=simple

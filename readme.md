@@ -9,10 +9,10 @@
 
 | ชิ้นส่วน | รุ่น |
 |---|---|
-| Controller | Raspberry Pi 5 |
+| Controller | Raspberry Pi 4 หรือ Raspberry Pi 5 |
 | Sensor | TFmini Plus (IP65, UART) |
 | Buzzer | Active piezo 95dB 3–24V via MOSFET |
-| GPIO library | lgpio (รองรับ RPi5) |
+| GPIO library | lgpio (รองรับ Raspberry Pi 4 และ Raspberry Pi 5) |
 
 ### การต่อขา
 
@@ -34,13 +34,12 @@ Buzzer (-)      →  GND
 ```
 ระยะ (cm)     Zone     Buzzer
 > 200         CLEAR    เงียบ
-150 – 200     FAR      beep ช้า ~1 Hz
-100 – 150     MID      beep กลาง → 3 Hz
- 50 – 100     NEAR     beep ถี่ → 8 Hz
-< 50          SOLID    buzz ต่อเนื่อง
+155 – 200     FAR      beep 2 Hz
+105 – 155     MID      beep 6 Hz
+< 105         SOLID    buzz ต่อเนื่อง
 ```
 
-ความถี่ภายในแต่ละ zone จะ interpolate แบบ smooth ตามระยะ ไม่กระโดดทันที
+ค่า zone และความถี่อ่านจาก `config.json`; ตารางนี้ตรงกับค่า default ปัจจุบัน
 
 ### Alert พิเศษ
 
@@ -55,14 +54,19 @@ Buzzer (-)      →  GND
 
 ### ข้อกำหนดเบื้องต้น
 
-เปิด UART บน RPi5 ก่อน (ครั้งแรกครั้งเดียว):
+รองรับ Raspberry Pi 4 และ Raspberry Pi 5 ด้วย codebase เดียว ก่อนติดตั้งให้เปิด hardware UART และปิด serial login shell:
 
 ```bash
 sudo raspi-config
 # Interface Options → Serial Port
-# Login shell: No  |  Hardware enabled: Yes
-# → Reboot
+# Login shell over serial: No
+# Serial hardware: Yes
+sudo reboot
 ```
+
+หลัง reboot ตรวจสอบ `ls -l /dev/serial0` โปรแกรมใช้ stable alias `/dev/serial0` จึงไม่ขึ้นกับชื่ออุปกรณ์ UART ภายในของ Pi แต่ละรุ่น หาก alias ไม่มี ให้ตรวจสองค่าใน `raspi-config` อีกครั้งแล้ว reboot
+
+บน Raspberry Pi 5 บาง configuration, `serial0` อาจชี้ไปที่ dedicated debug header หาก installer ตรวจพบกรณีนี้ มันจะหยุดก่อนติดตั้งและแสดง config path ที่มีอยู่ ให้เพิ่ม `dtparam=uart0_console=on` ในไฟล์นั้นแล้ว reboot เพื่อ map `serial0` มาที่ GPIO14/15 Installer จะไม่แก้ boot configuration อัตโนมัติ
 
 ### ติดตั้งระบบ
 
@@ -72,8 +76,8 @@ cd ecarsafetysense
 sudo bash install.sh
 ```
 
-`install.sh` จะทำทุกอย่างให้อัตโนมัติ:
-- ติดตั้ง Python packages (pyserial, lgpio)
+`install.sh` จะตรวจ `/dev/serial0` ก่อนเปลี่ยนระบบ แล้วจึง:
+- ติดตั้ง Python packages (`python3-serial`, `python3-lgpio`)
 - copy ไฟล์ไปที่ `/opt/safety_sense/`
 - ลง systemd service (autostart + restart on crash)
 - ลง VNC terminal monitor (popup log อัตโนมัติตอนบูต)
@@ -99,16 +103,26 @@ ecarsafetysense/
 แก้ค่าได้ที่ `/opt/safety_sense/config.json` โดยไม่ต้องแตะโค้ด
 
 ```json
+"uart": {
+    "port": "/dev/serial0",
+    "baud": 115200
+},
+"pins": {
+    "buzzer": 23
+}
+```
+
+```json
 "zones": {
     "clear_cm": 200,   ← เริ่ม beep ที่ระยะนี้
-    "far_cm":   150,   ← เปลี่ยน zone FAR → MID
-    "mid_cm":   100,   ← เปลี่ยน zone MID → NEAR
-    "near_cm":   50    ← เปลี่ยน zone NEAR → SOLID
+    "far_cm":   155,   ← เปลี่ยน zone FAR → MID
+    "mid_cm":   105,
+    "near_cm":  105    ← ต่ำกว่าค่านี้เป็น SOLID
 },
 "buzzer": {
-    "freq_far_hz":  1.0,   ← Hz ที่ขอบ FAR
-    "freq_mid_hz":  3.0,   ← Hz ที่ขอบ MID
-    "freq_near_hz": 8.0    ← Hz ที่ขอบ NEAR
+    "freq_far_hz":  2.0,
+    "freq_mid_hz":  6.0,
+    "freq_near_hz": 6.0
 }
 ```
 
@@ -138,6 +152,18 @@ sudo systemctl stop safety_sense
 # ดูไฟล์ log
 ls -lh /var/log/safety_sense/
 ```
+
+ตอนเริ่มทำงาน journal จะแสดง Raspberry Pi model, configured UART path, resolved UART target และ buzzer GPIO
+
+### Troubleshooting: ไม่พบ `/dev/serial0`
+
+```bash
+ls -l /dev/serial0
+sudo raspi-config
+sudo journalctl -u safety_sense -b --no-pager
+```
+
+ตั้ง `Login shell over serial: No` และ `Serial hardware: Yes` แล้ว reboot ตรวจสาย TFmini Plus TX → GPIO15, RX → GPIO14 และ GND ร่วมกัน บน Pi 5 ให้ทำตามข้อความของ installer หาก `serial0` ยังชี้ไปที่ debug header และอย่าใช้ overlay แบบเก่าที่ผูกกับ Pi 5 รุ่นเดียว
 
 ---
 
@@ -179,7 +205,7 @@ sudo bash install.sh
 - ✅ JSON-Lines log — 30 วัน + size cap อัตโนมัติ
 - ✅ Systemd autostart — บูตขึ้นมาทำงานเอง
 - ✅ VNC terminal popup — เห็น log ทันทีตอนเปิด VNC
-- ✅ GPIO lgpio — รองรับ Raspberry Pi 5
+- ✅ GPIO lgpio — รองรับ Raspberry Pi 4 และ Raspberry Pi 5
 
 ---
 
