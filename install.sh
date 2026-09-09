@@ -7,6 +7,64 @@ LOG_DIR="/var/log/safety_sense"
 AUTOSTART_DIR="/etc/xdg/autostart"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+print_config_summary() {
+  local config_path="$1"
+  "${PYTHON_BIN:-python3}" - "$config_path" <<'PY'
+import json
+import sys
+
+
+def format_number(value):
+    return f"{value:g}"
+
+
+def print_row(label, value):
+    print(f"{label:<26}: {value}")
+
+
+with open(sys.argv[1], encoding="utf-8") as config_file:
+    config = json.load(config_file)
+
+zones = config["zones"]
+buzzer = config["buzzer"]
+clear = zones["clear_cm"]
+far = zones["far_cm"]
+mid = zones["mid_cm"]
+near = zones["near_cm"]
+
+print("Zone map (from config.json)")
+print_row(f"> {format_number(clear)} cm", "CLEAR")
+
+if clear == far:
+    print_row("FAR", f"disabled (clear_cm == far_cm == {format_number(far)})")
+else:
+    print_row(f"> {format_number(far)} to <= {format_number(clear)} cm", "FAR")
+
+if far == mid:
+    print_row("MID", f"disabled (far_cm == mid_cm == {format_number(mid)})")
+else:
+    print_row(f"> {format_number(mid)} to <= {format_number(far)} cm", "MID")
+
+if mid == near:
+    print_row("NEAR", f"disabled (mid_cm == near_cm == {format_number(near)})")
+else:
+    print_row(f"> {format_number(near)} to <= {format_number(mid)} cm", "NEAR")
+
+print_row(f"<= {format_number(near)} cm", "SOLID")
+print()
+print("Buzzer settings (from config.json)")
+print_row("FAR anchor", f"{format_number(buzzer['freq_far_hz'])} Hz")
+print_row("MID anchor", f"{format_number(buzzer['freq_mid_hz'])} Hz")
+print_row("NEAR anchor", f"{format_number(buzzer['freq_near_hz'])} Hz")
+print_row("Duty cycle", f"{format_number(buzzer['duty_cycle_pct'])}%")
+PY
+}
+
+if [[ "${1:-}" == "--print-summary" ]]; then
+  print_config_summary "${2:-$SCRIPT_DIR/config.json}"
+  exit 0
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════╗"
 echo "║   E-car Safety Sense — KURURU2  Installer   ║"
@@ -101,19 +159,12 @@ systemctl status "$SERVICE_NAME" --no-pager -l
 echo ""
 echo "✅ ติดตั้งเสร็จแล้ว"
 echo ""
-echo "┌──────────────────────────────────────────────────────────┐"
-echo "│  Zone map (default)                                      │"
-echo "│  > 200 cm  : CLEAR  — เงียบ                              │"
-echo "│  150–200   : FAR    — beep เบา (1 Hz)                    │"
-echo "│  100–150   : MID    — beep กลาง (→ 3 Hz)                 │"
-echo "│   50–100   : NEAR   — beep ถี่ (→ 8 Hz)                  │"
-echo "│  < 50 cm   : SOLID  — buzz ต่อเนื่อง                      │"
-echo "│                                                          │"
-echo "│  แก้ค่า:  nano /opt/safety_sense/config.json             │"
-echo "│           systemctl restart safety_sense                 │"
-echo "│                                                          │"
-echo "│  journalctl -u safety_sense -f   # ดู log realtime       │"
-echo "│  systemctl status safety_sense   # ดูสถานะ               │"
-echo "│                                                          │"
-echo "│  🖥️  เปิด VNC → terminal popup ขึ้นอัตโนมัติตอนบูต        │"
-echo "└──────────────────────────────────────────────────────────┘"
+print_config_summary "$INSTALL_DIR/config.json"
+echo ""
+echo "แก้ค่า:  nano /opt/safety_sense/config.json"
+echo "          systemctl restart safety_sense"
+echo ""
+echo "journalctl -u safety_sense -f   # ดู log realtime"
+echo "systemctl status safety_sense   # ดูสถานะ"
+echo ""
+echo "🖥️  เปิด VNC → terminal popup ขึ้นอัตโนมัติตอนบูต"

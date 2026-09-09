@@ -144,12 +144,13 @@ pip install pyserial lgpio --break-system-packages
 ระยะ (cm)    Zone    Buzzer                  ความหมาย
 ─────────────────────────────────────────────────────────
 > 200        CLEAR   เงียบ                    ไม่มีของในระยะ
-150 – 200    FAR     beep 3 Hz               มีของ แต่ยังไกล
-100 – 150    MID     beep 3 → 6 Hz (smooth)  ระวัง
-< 100        SOLID   buzz ต่อเนื่อง           หยุดทันที!
+155 – 200    FAR     beep 2 Hz               มีของ แต่ยังไกล
+105 – 155    MID     beep 6 Hz               ระวัง
+NEAR         disabled                         mid_cm == near_cm
+<= 105       SOLID   buzz ต่อเนื่อง           หยุดทันที!
 ```
 
-**หมายเหตุ:** ระบบเดิมออกแบบเป็น 4-zone (มี NEAR 50-100cm) แต่ปรับเป็น 3-zone หลังทดสอบจริง โดยตั้ง `near_cm = mid_cm = 100` ทำให้ NEAR zone หายไป และ < 100cm เป็น SOLID เลย
+**หมายเหตุ:** config ปัจจุบันตั้ง `near_cm = mid_cm = 105` ทำให้ NEAR zone หายไป และระยะ <= 105 cm เป็น SOLID ส่วน installer สร้างตารางนี้จาก `config.json` เพื่อไม่ให้ข้อความสรุปคลาดเคลื่อนเมื่อแก้ค่า
 
 ### Alert Patterns พิเศษ
 | State | Pattern | เหตุ |
@@ -179,18 +180,15 @@ lgpio.gpio_write(_gpio_handle, PIN_BUZZER, 1)          # HIGH = buzzer ON
 ### 6.3 interpolate_freq(dist_cm) → float | None
 ```python
 def interpolate_freq(dist_cm: int):
-    """Returns Hz (float) or None = solid buzz."""
-    if dist_cm > ZONE_CLEAR:    return 0.0    # เงียบ
-    if dist_cm <= ZONE_NEAR:    return None   # SOLID
-    if dist_cm > ZONE_FAR:      # FAR zone: ramp จาก FREQ_FAR
-        t = (ZONE_CLEAR - dist_cm) / max(ZONE_CLEAR - ZONE_FAR, 1)
-        return FREQ_FAR * (1 + 0.3 * t)
-    if dist_cm > ZONE_MID:      # MID zone: interpolate FREQ_FAR → FREQ_MID
-        t = (ZONE_FAR - dist_cm) / max(ZONE_FAR - ZONE_MID, 1)
-        return FREQ_FAR + (FREQ_MID - FREQ_FAR) * t
-    # NEAR zone: interpolate FREQ_MID → FREQ_NEAR
-    t = (ZONE_MID - dist_cm) / max(ZONE_MID - ZONE_NEAR, 1)
-    return FREQ_MID + (FREQ_NEAR - FREQ_MID) * t
+    """Returns Hz (float) or None = solid buzz.
+    Step function — ความถี่คงที่ตลอดทั้ง zone ไม่มีการไล่ค่า"""
+    if dist_cm > ZONE_CLEAR:
+        return 0.0
+    if dist_cm <= ZONE_NEAR:
+        return None
+    if dist_cm > ZONE_FAR:
+        return FREQ_FAR
+    return FREQ_MID
 ```
 
 ### 6.4 class ZoneFilter

@@ -36,7 +36,8 @@ Buzzer (-)      →  GND
 > 200         CLEAR    เงียบ
 155 – 200     FAR      beep 2 Hz
 105 – 155     MID      beep 6 Hz
-< 105         SOLID    buzz ต่อเนื่อง
+NEAR          disabled (mid_cm == near_cm == 105)
+≤ 105         SOLID    buzz ต่อเนื่อง
 ```
 
 ค่า zone และความถี่อ่านจาก `config.json`; ตารางนี้ตรงกับค่า default ปัจจุบัน
@@ -122,7 +123,8 @@ ecarsafetysense/
 "buzzer": {
     "freq_far_hz":  2.0,
     "freq_mid_hz":  6.0,
-    "freq_near_hz": 6.0
+    "freq_near_hz": 6.0,
+    "duty_cycle_pct": 50
 }
 ```
 
@@ -198,7 +200,7 @@ sudo bash install.sh
 
 ## Features
 
-- ✅ Car-style proximity beep — ถี่ขึ้น smooth ตามระยะ
+- ✅ Car-style proximity beep — ความถี่คงที่ตาม zone ที่กำหนดใน config
 - ✅ Watchdog timer — ตรวจจับ sensor หาย/ตาย
 - ✅ Sensor health check — ตรวจ signal strength ทุก frame
 - ✅ Config file — แก้ค่าได้โดยไม่แตะโค้ด

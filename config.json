@@ -12,7 +12,7 @@
   },
 
   "zones": {
-    "_comment": "กำหนดขอบเขตของแต่ละ zone (cm) — ต้อง far > mid > near > 0",
+    "_comment": "กำหนดขอบเขตของแต่ละ zone (cm) — ต้อง clear >= far >= mid >= near > 0; ค่าเท่ากันจะปิด zone ระหว่างขอบนั้น",
     "clear_cm": 200,
     "far_cm":   155,
     "mid_cm":   105,
@@ -21,7 +21,7 @@
   },
 
   "buzzer": {
-    "_comment": "3 ค่า Hz ที่ใช้เป็น anchor — ระหว่าง zone จะ interpolate เองอัตโนมัติ",
+    "_comment": "ความถี่คงที่ของแต่ละ zone; config ปัจจุบันปิด NEAR เพราะ mid_cm == near_cm",
     "freq_far_hz":  2.0,
     "freq_mid_hz":  6.0,
     "freq_near_hz": 6.0,
