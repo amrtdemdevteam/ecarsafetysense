@@ -10,17 +10,24 @@
 | ชิ้นส่วน | รุ่น |
 |---|---|
 | Controller | Raspberry Pi 4 หรือ Raspberry Pi 5 |
-| Sensor | TFmini Plus (IP65, UART) |
+| Sensor | Benewake TFmini Plus or TF-NOVA (UART, standard 9-byte frame) |
 | Buzzer | Active piezo 95dB 3–24V via MOSFET |
 | GPIO library | lgpio (รองรับ Raspberry Pi 4 และ Raspberry Pi 5) |
 
 ### การต่อขา
 
 ```
-TFmini Plus TX  →  GPIO15 (RPi RX)
-TFmini Plus RX  →  GPIO14 (RPi TX)
-TFmini Plus VCC →  5V
-TFmini Plus GND →  GND
+Benewake sensor TX  →  GPIO15 (RPi RX)
+Benewake sensor RX  →  GPIO14 (RPi TX)
+Benewake sensor VCC →  5V
+Benewake sensor GND →  GND
+
+The runtime supports `sensor.profile=auto` for the common Benewake 9-byte UART
+protocol. TFmini Plus and TF-NOVA are not distinguished by guessing from a
+distance value; the service requests standard 9-byte/cm output at startup so a
+previous 9-byte/mm setting does not silently turn a close target into CLEAR.
+The connector pinout and physical wiring must still be verified for the sensor
+installed on the vehicle.
 
 MOSFET Gate     →  GPIO23
 Buzzer (+)      →  24V (ผ่าน MOSFET)

@@ -29,12 +29,25 @@
   },
 
   "sensor": {
+    "profile":          "auto",
+    "distance_unit":    "cm",
+    "force_output_unit": "cm",
+    "profiles": {
+      "tfmini_plus": {
+        "distance_unit": "cm"
+      },
+      "tf_nova": {
+        "distance_unit": "cm"
+      }
+    },
+    "_comment_profile": "auto ใช้ Benewake standard 9-byte ที่ใช้ร่วมกันได้ทั้ง TFmini Plus และ TF-NOVA; ไม่เดา model จากค่าระยะ",
+    "_comment_output": "ขอให้ sensor ส่ง standard 9-byte/cm ทุกครั้งที่ service start โดยไม่ save flash; รองรับกรณีเดิมเป็น mm",
     "median_window":  3,
     "min_dist_cm":    10,
     "max_dist_cm":    200,
     "min_strength":   0,
     "frame_rate_hz":  10,
-    "_comment_rate": "TFmini Plus frame rate: 10, 20, 50, หรือ 100 Hz"
+    "_comment_rate": "Benewake frame rate command map: 10, 20, 50, หรือ 100 Hz"
   },
 
   "filter": {

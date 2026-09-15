@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 E-car Safety Sense — KURURU2
-Hardware : Raspberry Pi 4 or Raspberry Pi 5
-Sensor   : TFmini Plus  UART TX→GPIO15 (RPi RX), RX→GPIO14 (RPi TX)
+ Hardware : Raspberry Pi 4 or Raspberry Pi 5
+ Sensor   : Benewake TFmini Plus or TF-NOVA, UART TX→GPIO15 (RPi RX), RX→GPIO14 (RPi TX)
 Buzzer   : Active piezo via MOSFET → GPIO23
 
 Features:
@@ -17,6 +17,7 @@ import signal
 import sys
 import time
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -79,6 +80,103 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger("safety_sense")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Benewake sensor profiles
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class SensorProfile:
+    """Runtime interpretation for a Benewake UART sensor.
+
+    TFmini Plus and TF-NOVA use the same standard 9-byte field layout for the
+    values SafetySense consumes (distance and signal/peak).  The model name is
+    therefore a configuration label, not something inferred from a frame.
+    """
+
+    name: str
+    protocol: str
+    distance_unit: str
+    frame_rate_hz: int
+    force_output_unit: str | None = None
+
+
+def _normalise_unit(unit: str) -> str:
+    value = str(unit).strip().lower()
+    if value not in {"cm", "mm"}:
+        raise ValueError(f"Unsupported sensor distance unit: {unit!r}")
+    return value
+
+
+def resolve_sensor_profile(sensor_cfg: dict) -> SensorProfile:
+    """Resolve an explicit model label or the common automatic profile.
+
+    ``auto`` means automatic compatibility with the common Benewake 9-byte
+    UART protocol.  It deliberately does not guess TFmini Plus versus TF-NOVA
+    from a distance value because both manuals define the same frame layout.
+    """
+
+    requested = str(sensor_cfg.get("profile", "tfmini_plus")).strip().lower()
+    aliases = {
+        "tfmini": "tfmini_plus",
+        "tfmini-plus": "tfmini_plus",
+        "tf-nova": "tf_nova",
+        "nova": "tf_nova",
+    }
+    requested = aliases.get(requested, requested)
+    supported = {"auto", "tfmini_plus", "tf_nova"}
+    if requested not in supported:
+        raise ValueError(f"Unsupported sensor profile: {requested!r}")
+
+    profile_cfg = sensor_cfg.get("profiles", {}).get(requested, {})
+    configured_unit = sensor_cfg.get(
+        "distance_unit", profile_cfg.get("distance_unit", "cm")
+    )
+    distance_unit = _normalise_unit(configured_unit)
+
+    forced_unit = sensor_cfg.get(
+        "force_output_unit", profile_cfg.get("force_output_unit")
+    )
+    if forced_unit is not None:
+        forced_unit = _normalise_unit(forced_unit)
+        # The parser must match the output format requested at startup.
+        distance_unit = forced_unit
+
+    frame_rate = int(
+        sensor_cfg.get("frame_rate_hz", profile_cfg.get("frame_rate_hz", 10))
+    )
+    if frame_rate < 0:
+        raise ValueError("Sensor frame rate must be non-negative")
+
+    return SensorProfile(
+        name=requested,
+        protocol="benewake_9byte",
+        distance_unit=distance_unit,
+        frame_rate_hz=frame_rate,
+        force_output_unit=forced_unit,
+    )
+
+
+def normalize_distance_cm(raw_distance: int, unit: str) -> int:
+    """Convert a sensor distance value to the integer centimetres used by zones."""
+
+    unit = _normalise_unit(unit)
+    if unit == "cm":
+        return int(raw_distance)
+    return int((int(raw_distance) + 5) // 10)
+
+
+def output_format_command(unit: str) -> bytes:
+    """Build the documented Benewake standard output-format command."""
+
+    unit = _normalise_unit(unit)
+    format_id = 0x01 if unit == "cm" else 0x06
+    command = [0x5A, 0x05, 0x05, format_id]
+    command.append(sum(command) & 0xFF)
+    return bytes(command)
+
+
+DEFAULT_SENSOR_PROFILE = resolve_sensor_profile(CFG["sensor"])
 
 
 def log_platform_info():
@@ -240,9 +338,9 @@ class LogManager:
                 log.warning(f"[Log] Remove failed {oldest.name}: {e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TFmini Plus driver
+# Benewake UART driver (TFmini Plus and TF-NOVA)
 # ─────────────────────────────────────────────────────────────────────────────
-class TFminiPlus:
+class BenewakeSensor:
     HEADER = 0x59
 
     # Frame rate command: 0x5A 0x06 0x03 <rate_L> <rate_H> <checksum>
@@ -254,9 +352,23 @@ class TFminiPlus:
     }
 
     def __init__(self):
+        self.profile = resolve_sensor_profile(CFG["sensor"])
         self.ser = serial.Serial(UART_PORT, UART_BAUD, timeout=0.1)
-        log.info(f"TFmini Plus on {UART_PORT} @ {UART_BAUD}")
-        self._set_framerate(FRAME_RATE_HZ)
+        log.info(
+            f"Benewake sensor profile={self.profile.name} "
+            f"protocol={self.profile.protocol} unit={self.profile.distance_unit} "
+            f"on {UART_PORT} @ {UART_BAUD}"
+        )
+        if self.profile.force_output_unit is not None:
+            self._set_output_format(self.profile.force_output_unit)
+        self._set_framerate(self.profile.frame_rate_hz)
+
+    def _set_output_format(self, unit: str):
+        """Request cm/mm standard output without saving sensor flash settings."""
+        self.ser.write(output_format_command(unit))
+        time.sleep(0.1)
+        self.ser.flushInput()
+        log.info(f"Benewake output format requested: standard 9-byte/{unit}")
 
     def _set_framerate(self, hz: int):
         cmd = self.FRAMERATE_CMD.get(hz)
@@ -264,9 +376,9 @@ class TFminiPlus:
             self.ser.write(cmd)
             time.sleep(0.1)
             self.ser.flushInput()
-            log.info(f"TFmini Plus frame rate set to {hz} Hz")
+            log.info(f"Benewake frame rate set to {hz} Hz")
         else:
-            log.warning(f"Frame rate {hz}Hz not supported, using default 100Hz")
+            log.warning(f"Frame rate {hz}Hz not supported by local command map")
 
     def read(self):
         """Returns (dist_cm, strength) or (None, None)."""
@@ -284,13 +396,16 @@ class TFminiPlus:
             return None, None
 
         dist_l, dist_h, str_l, str_h, res_l, res_h, checksum = rest
-        dist     = (dist_h << 8) | dist_l
+        raw_dist = (dist_h << 8) | dist_l
         strength = (str_h  << 8) | str_l
 
         raw = [self.HEADER, self.HEADER, dist_l, dist_h,
                str_l, str_h, res_l, res_h]
         if (sum(raw) & 0xFF) != checksum:
             return None, None
+
+        profile = getattr(self, "profile", DEFAULT_SENSOR_PROFILE)
+        dist = normalize_distance_cm(raw_dist, profile.distance_unit)
 
         if not (MIN_DIST_CM <= dist <= MAX_DIST_CM):
             if dist > MAX_DIST_CM:
@@ -303,6 +418,10 @@ class TFminiPlus:
 
     def close(self):
         self.ser.close()
+
+
+# Backward-compatible name retained for existing service/test integrations.
+TFminiPlus = BenewakeSensor
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sensor health

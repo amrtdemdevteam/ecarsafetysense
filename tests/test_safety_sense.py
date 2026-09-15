@@ -19,11 +19,22 @@ ROOT = Path(__file__).resolve().parents[1]
 class FakeSerialPort:
     def __init__(self, data: bytes = b"") -> None:
         self.data = bytearray(data)
+        self.writes = []
 
     def read(self, size: int = 1) -> bytes:
         result = bytes(self.data[:size])
         del self.data[:size]
         return result
+
+    def write(self, data: bytes) -> int:
+        self.writes.append(bytes(data))
+        return len(data)
+
+    def flushInput(self) -> None:
+        self.data.clear()
+
+    def close(self) -> None:
+        pass
 
 
 def load_runtime():
@@ -95,9 +106,11 @@ class DistanceBehaviorTests(unittest.TestCase):
 
 
 class UartFrameTests(unittest.TestCase):
-    def read(self, data: bytes):
+    def read(self, data: bytes, profile=None):
         sensor = RUNTIME.TFminiPlus.__new__(RUNTIME.TFminiPlus)
         sensor.ser = FakeSerialPort(data)
+        if profile is not None:
+            sensor.profile = profile
         return sensor.read()
 
     def test_valid_frame(self):
@@ -120,6 +133,56 @@ class UartFrameTests(unittest.TestCase):
     def test_below_minimum_is_rejected(self):
         minimum = CONFIG["sensor"]["min_dist_cm"]
         self.assertEqual(self.read(frame(minimum - 1, 456)), (None, None))
+
+    def test_mm_profile_normalizes_before_zone_limits(self):
+        profile = RUNTIME.resolve_sensor_profile(
+            {"profile": "tf_nova", "distance_unit": "mm"}
+        )
+        self.assertEqual(self.read(frame(1000, 456), profile), (100, 456))
+
+
+class SensorProfileTests(unittest.TestCase):
+    def test_profiles_use_the_common_benewake_frame_layout(self):
+        mini = RUNTIME.resolve_sensor_profile({"profile": "tfmini_plus"})
+        nova = RUNTIME.resolve_sensor_profile({"profile": "tf_nova"})
+        auto = RUNTIME.resolve_sensor_profile({"profile": "auto"})
+
+        self.assertEqual(mini.protocol, "benewake_9byte")
+        self.assertEqual(nova.protocol, "benewake_9byte")
+        self.assertEqual(auto.protocol, "benewake_9byte")
+        self.assertEqual(mini.distance_unit, "cm")
+        self.assertEqual(nova.distance_unit, "cm")
+        self.assertEqual(auto.distance_unit, "cm")
+
+    def test_mm_distance_is_normalized_before_zone_limits_are_applied(self):
+        self.assertEqual(RUNTIME.normalize_distance_cm(1000, "mm"), 100)
+        self.assertEqual(RUNTIME.normalize_distance_cm(100, "cm"), 100)
+
+    def test_output_format_commands_are_documented_benewake_commands(self):
+        self.assertEqual(
+            RUNTIME.output_format_command("cm"),
+            bytes([0x5A, 0x05, 0x05, 0x01, 0x65]),
+        )
+        self.assertEqual(
+            RUNTIME.output_format_command("mm"),
+            bytes([0x5A, 0x05, 0x05, 0x06, 0x6A]),
+        )
+
+    def test_unknown_profile_is_rejected(self):
+        with self.assertRaises(ValueError):
+            RUNTIME.resolve_sensor_profile({"profile": "unknown_sensor"})
+
+    def test_auto_startup_requests_cm_then_configures_frame_rate(self):
+        port = FakeSerialPort()
+        with mock.patch.object(RUNTIME.serial, "Serial", return_value=port), mock.patch.object(
+            RUNTIME.time, "sleep"
+        ):
+            sensor = RUNTIME.BenewakeSensor()
+
+        self.assertEqual(len(port.writes), 2)
+        self.assertEqual(port.writes[0], RUNTIME.output_format_command("cm"))
+        self.assertEqual(port.writes[1], RUNTIME.BenewakeSensor.FRAMERATE_CMD[10])
+        sensor.close()
 
 
 class ZoneFilterTests(unittest.TestCase):
