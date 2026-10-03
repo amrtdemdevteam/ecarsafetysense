@@ -83,16 +83,75 @@ for source_file in safety_sense.py config.json safety_sense.service safety_sense
   fi
 done
 
+UART_MARKER="/var/lib/safety_sense/uart-configured"
+
+uart_ready() {
+  [[ -e /dev/serial0 ]] || return 1
+  if grep -Eq '(^| )console=(serial0|ttyS0|ttyAMA0)(,| |$)' /proc/cmdline; then
+    return 1
+  fi
+  local uart_name
+  uart_name="$(basename "$(readlink -f /dev/serial0)")"
+  if systemctl is-active --quiet "serial-getty@${uart_name}.service"; then
+    return 1
+  fi
+  return 0
+}
+
+current_boot_id() {
+  cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo "unknown"
+}
+
+ask_reboot() {
+  echo ""
+  echo "ต้อง reboot 1 ครั้งเพื่อให้การตั้งค่า UART มีผล"
+  echo "หลัง reboot ให้รันคำสั่งเดิมอีกครั้ง:"
+  echo "  cd $SCRIPT_DIR && sudo bash install.sh"
+  echo ""
+  if [[ -t 0 ]]; then
+    read -r -p "Reboot ตอนนี้เลยไหม? [y/N] " answer
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
+      echo "กำลัง reboot..."
+      reboot
+      exit 0
+    fi
+  fi
+  echo "ยังไม่ได้ reboot — สั่งเองด้วย: sudo reboot"
+  exit 0
+}
+
 echo "[1/7] ตรวจสอบ UART..."
-if [[ ! -e /dev/serial0 ]]; then
-  echo "ERROR: ไม่พบ /dev/serial0 — ยังไม่มีการติดตั้งหรือเริ่ม service" >&2
-  echo "เปิด UART ด้วย: sudo raspi-config" >&2
-  echo "  Interface Options -> Serial Port" >&2
-  echo "  Login shell over serial: No" >&2
-  echo "  Serial hardware: Yes" >&2
-  echo "จากนั้น reboot และรัน installer อีกครั้ง" >&2
-  exit 1
+if ! uart_ready; then
+  if [[ -f "$UART_MARKER" ]]; then
+    if [[ "$(cat "$UART_MARKER")" == "$(current_boot_id)" ]]; then
+      echo "    ตั้งค่า UART ไปแล้ว แต่ยังไม่ได้ reboot"
+      ask_reboot
+    fi
+    echo "ERROR: reboot แล้วแต่ UART ยังไม่พร้อม (/dev/serial0 หรือ serial console)" >&2
+    echo "ตรวจด้วยมือ: sudo raspi-config" >&2
+    echo "  Interface Options -> Serial Port" >&2
+    echo "  Login shell over serial: No" >&2
+    echo "  Serial hardware: Yes" >&2
+    echo "จากนั้น reboot และรัน installer อีกครั้ง" >&2
+    rm -f "$UART_MARKER"
+    exit 1
+  fi
+
+  if ! command -v raspi-config >/dev/null 2>&1; then
+    echo "ERROR: UART ยังไม่พร้อม และไม่พบ raspi-config ให้ตั้งค่าเอง" >&2
+    echo "เปิด hardware UART และปิด serial login shell แล้ว reboot" >&2
+    exit 1
+  fi
+
+  echo "    UART ยังไม่พร้อม — เปิด hardware UART และปิด serial login shell ให้อัตโนมัติ"
+  raspi-config nonint do_serial_hw 0
+  raspi-config nonint do_serial_cons 1
+  mkdir -p "$(dirname "$UART_MARKER")"
+  current_boot_id > "$UART_MARKER"
+  echo "    ✓ raspi-config: serial hardware = on, serial console = off"
+  ask_reboot
 fi
+rm -f "$UART_MARKER"
 
 PI_MODEL="unknown"
 if [[ -r /proc/device-tree/model ]]; then

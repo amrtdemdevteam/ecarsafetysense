@@ -60,23 +60,9 @@ NEAR          disabled (mid_cm == near_cm == 105)
 
 ## ติดตั้ง
 
-### ข้อกำหนดเบื้องต้น
-
-รองรับ Raspberry Pi 4 และ Raspberry Pi 5 ด้วย codebase เดียว ก่อนติดตั้งให้เปิด hardware UART และปิด serial login shell:
-
-```bash
-sudo raspi-config
-# Interface Options → Serial Port
-# Login shell over serial: No
-# Serial hardware: Yes
-sudo reboot
-```
-
-หลัง reboot ตรวจสอบ `ls -l /dev/serial0` โปรแกรมใช้ stable alias `/dev/serial0` จึงไม่ขึ้นกับชื่ออุปกรณ์ UART ภายในของ Pi แต่ละรุ่น หาก alias ไม่มี ให้ตรวจสองค่าใน `raspi-config` อีกครั้งแล้ว reboot
-
-บน Raspberry Pi 5 บาง configuration, `serial0` อาจชี้ไปที่ dedicated debug header หาก installer ตรวจพบกรณีนี้ มันจะหยุดก่อนติดตั้งและแสดง config path ที่มีอยู่ ให้เพิ่ม `dtparam=uart0_console=on` ในไฟล์นั้นแล้ว reboot เพื่อ map `serial0` มาที่ GPIO14/15 Installer จะไม่แก้ boot configuration อัตโนมัติ
-
 ### ติดตั้งระบบ
+
+รองรับ Raspberry Pi 4 และ Raspberry Pi 5 ด้วย codebase เดียว บน Pi ใหม่ใช้คำสั่งเดียว:
 
 ```bash
 git clone https://github.com/amrtdemdevteam/ecarsafetysense.git
@@ -84,7 +70,18 @@ cd ecarsafetysense
 sudo bash install.sh
 ```
 
-`install.sh` จะตรวจ `/dev/serial0` ก่อนเปลี่ยนระบบ แล้วจึง:
+ถ้า UART ยังไม่พร้อม installer จะเปิด hardware UART และปิด serial login shell ให้เอง (`raspi-config nonint`) แล้วขอให้ reboot 1 ครั้ง หลัง reboot ให้รันคำสั่งเดิมอีกครั้ง:
+
+```bash
+cd ecarsafetysense
+sudo bash install.sh
+```
+
+รันซ้ำได้ทุกเมื่อ (เช่น ตอนอัปเดตโค้ด) installer จะข้ามขั้นที่เสร็จแล้วและติดตั้งไฟล์ล่าสุดทับ
+
+บน Raspberry Pi 5 บาง configuration, `serial0` อาจชี้ไปที่ dedicated debug header หาก installer ตรวจพบกรณีนี้ มันจะหยุดก่อนติดตั้งและแสดง config path ที่มีอยู่ ให้เพิ่ม `dtparam=uart0_console=on` ในไฟล์นั้นแล้ว reboot เพื่อ map `serial0` มาที่ GPIO14/15
+
+เมื่อ UART พร้อมแล้ว `install.sh` จะ:
 - ติดตั้ง Python packages (`python3-serial`, `python3-lgpio`)
 - copy ไฟล์ไปที่ `/opt/safety_sense/`
 - ลง systemd service (autostart + restart on crash)
