@@ -189,6 +189,36 @@ sudo journalctl -u safety_sense -b --no-pager
 
 ---
 
+## ชื่อเครื่อง (hostname)
+
+ทุกคันใช้รูปแบบชื่อเดียวกัน คือ `ecarsafetysense-NNN` โดย NNN เป็นหมายเลขคัน 3 หลัก ตั้งแต่ `001` ถึง `143`
+
+| คัน | hostname |
+|---|---|
+| 1 | `ecarsafetysense-001` |
+| 2 | `ecarsafetysense-002` |
+| 3 | `ecarsafetysense-003` |
+| ... | ... |
+| 143 | `ecarsafetysense-143` |
+
+ตั้งชื่อเครื่องบน Pi (รันครั้งเดียวต่อคัน แทน NNN ด้วยหมายเลขของคันนั้น):
+
+```bash
+sudo hostnamectl set-hostname ecarsafetysense-NNN
+sudo sed -i 's/^127\.0\.1\.1.*/127.0.1.1\tecarsafetysense-NNN/' /etc/hosts
+sudo reboot
+```
+
+หลัง reboot ตรวจด้วย `hostname` ต้องได้ชื่อใหม่ ถ้า `ecarsafetysense-NNN.local` ใช้ไม่ได้บน LAN ตรง ให้ใช้ IP ของเครื่องแทน
+
+ชื่อผู้ใช้สำหรับ login ใช้รูปแบบเดียวกับ hostname คือ `ecarsafetysense-NNN` เช่น `ssh ecarsafetysense-002@192.168.0.12` รหัสผ่านไม่ต้องเปลี่ยน
+
+IP ของ `eth0` บน LAN ตรงใช้รูปแบบ `192.168.0.(10+NNN)` คือ คัน 1 เป็น `192.168.0.11` คัน 2 เป็น `192.168.0.12` และคัน 3 เป็น `192.168.0.13`
+
+การเปลี่ยนชื่อผู้ใช้บน Pi ที่ติดตั้งแล้วต้องทำแยกจากการตั้ง hostname ต้องเปลี่ยนไฟล์ sudo (`/etc/sudoers.d/`), autologin (`lightdm.conf` และ `getty@tty1`), `subuid`/`subgid` และย้ายโฟลเดอร์ home ไปพร้อมกัน
+
+---
+
 ## อัปเดตโค้ด (ทำหลายคันได้เลย)
 
 ```bash
