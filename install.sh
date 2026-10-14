@@ -204,6 +204,33 @@ echo "[5/7] ติดตั้ง desktop autostart (VNC monitor)..."
 cp "$SCRIPT_DIR/safety_sense_monitor.desktop" "$AUTOSTART_DIR/"
 echo "    ✓ safety_sense_monitor.desktop"
 
+BOOT_CONFIG=""
+for config_file in /boot/firmware/config.txt /boot/config.txt; do
+  if [[ -f "$config_file" ]]; then
+    BOOT_CONFIG="$config_file"
+    break
+  fi
+done
+read -r BUZZER_PIN HOLD_TONE < <("${PYTHON_BIN:-python3}" - "$INSTALL_DIR/config.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+print(c["pins"]["buzzer"], int(bool(c.get("startup", {}).get("hold_tone_until_ready", False))))
+PY
+)
+EARLY_GPIO_LINE="gpio=${BUZZER_PIN}=op,dh"
+if [[ -n "$BOOT_CONFIG" ]]; then
+  if [[ "$HOLD_TONE" == "1" ]]; then
+    if ! grep -qxF "$EARLY_GPIO_LINE" "$BOOT_CONFIG"; then
+      printf '\n[all]\n%s\n' "$EARLY_GPIO_LINE" >> "$BOOT_CONFIG"
+      echo "    ✓ $BOOT_CONFIG: $EARLY_GPIO_LINE (buzzer ดังตั้งแต่เปิดเครื่อง มีผลหลัง reboot)"
+    else
+      echo "    ✓ $BOOT_CONFIG: $EARLY_GPIO_LINE มีอยู่แล้ว"
+    fi
+  else
+    sed -i "/^gpio=${BUZZER_PIN}=op,dh$/d" "$BOOT_CONFIG"
+  fi
+fi
+
 echo "[6/7] ลงทะเบียน systemd service..."
 cp "$SCRIPT_DIR/safety_sense.service" /etc/systemd/system/
 systemctl daemon-reload

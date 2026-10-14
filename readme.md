@@ -55,6 +55,7 @@ NEAR          disabled (mid_cm == near_cm == 105)
 |---|---|---|
 | SENSOR_WARN | beep-beep ... หยุด | เลนส์สกปรก / สัญญาณอ่อน |
 | SENSOR_FAIL | beep-beep-beep ... หยุด | sensor ไม่ส่งข้อมูล (ขาด / พัง) |
+| STARTUP | ดังยาวตั้งแต่เปิดเครื่อง | ระบบยังไม่พร้อม หยุดดังเมื่อได้ค่าจาก sensor ครั้งแรก |
 
 ---
 

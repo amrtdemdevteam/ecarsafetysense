@@ -207,5 +207,18 @@ class ZoneFilterTests(unittest.TestCase):
             self.assertEqual(zone_filter.update("FAR"), "FAR")
 
 
+
+class StartupToneTests(unittest.TestCase):
+    def test_hold_starts_buzzer_on_without_startup_beep(self):
+        with mock.patch.object(RUNTIME.threading, "Thread"), mock.patch.object(RUNTIME, "gpio_write") as write:
+            buzzer = RUNTIME.BuzzerController(hold=True)
+        self.assertEqual(buzzer._target_freq, buzzer._SOLID)
+        write.assert_not_called()
+
+    def test_config_enables_startup_hold(self):
+        self.assertTrue(CONFIG["startup"]["hold_tone_until_ready"])
+        self.assertTrue(RUNTIME.HOLD_UNTIL_READY)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -63,6 +63,11 @@
     "_comment": "เพิ่มจาก 3 → 5 วิ เพราะ frame rate ลดเหลือ 10Hz"
   },
 
+  "startup": {
+    "hold_tone_until_ready": true,
+    "_comment": "เปิดเครื่องแล้ว buzzer ดังยาวจนกว่าจะได้ค่าจาก sensor ครั้งแรก (false = ปี๊บสั้นแบบเดิม)"
+  },
+
   "health": {
     "fail_count_threshold": 999999
   },

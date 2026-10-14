@@ -70,6 +70,8 @@ LOG_MAX_MB      = CFG["log"]["max_mb"]
 LOG_RETAIN_DAYS = CFG["log"]["retain_days"]
 LOG_CHECK_EVERY = CFG["log"]["check_every_sec"]
 
+HOLD_UNTIL_READY = bool(CFG.get("startup", {}).get("hold_tone_until_ready", False))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Logger
 # ─────────────────────────────────────────────────────────────────────────────
@@ -202,10 +204,10 @@ def log_platform_info():
 # ─────────────────────────────────────────────────────────────────────────────
 _gpio_handle = None
 
-def gpio_init():
+def gpio_init(initial: int = 0):
     global _gpio_handle
     _gpio_handle = lgpio.gpiochip_open(0)
-    lgpio.gpio_claim_output(_gpio_handle, PIN_BUZZER, 0)
+    lgpio.gpio_claim_output(_gpio_handle, PIN_BUZZER, initial)
     log.info(f"GPIO init OK — buzzer pin {PIN_BUZZER} (lgpio)")
 
 def gpio_write(val: int):
@@ -490,11 +492,12 @@ class BuzzerController:
     _WARN_PAT = -2.0
     _FAIL_PAT = -3.0
 
-    def __init__(self):
-        self._target_freq = self._SILENT
+    def __init__(self, hold: bool = False):
+        self._target_freq = self._SOLID if hold else self._SILENT
         self._lock        = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
-        self._startup_beep()
+        if not hold:
+            self._startup_beep()
 
     def update(self, dist_cm: int):
         freq = interpolate_freq(dist_cm)
@@ -580,19 +583,21 @@ def main():
     log_platform_info()
 
     try:
-        gpio_init()
+        gpio_init(1 if HOLD_UNTIL_READY else 0)
         sensor = TFminiPlus()
     except (OSError, serial.SerialException) as exc:
         log.error(f"Hardware initialization failed: {exc}")
         gpio_cleanup()
         sys.exit(1)
 
-    buzzer   = BuzzerController()
+    buzzer   = BuzzerController(hold=HOLD_UNTIL_READY)
     watchdog = Watchdog(WATCHDOG_TIMEOUT)
     health   = SensorHealth()
     logmgr   = LogManager()
     zfilter  = ZoneFilter(HYSTERESIS_FRAMES, MIN_HOLD_SEC)
     samples  = []
+    ready    = not HOLD_UNTIL_READY
+    t_start  = time.monotonic()
 
     def shutdown(sig, frame):
         log.info("Shutdown — cleaning up")
@@ -625,6 +630,13 @@ def main():
                 logmgr.write({"event": "SENSOR_FAIL"})
                 watchdog._logged = True
             continue
+
+        if not ready:
+            if dist is None:
+                continue
+            ready = True
+            logmgr.write({"event": "READY", "after_sec": round(time.monotonic() - t_start, 1)})
+            log.info("System ready — startup tone OFF")
 
         if health_status == "SENSOR_WARN":
             buzzer.set_alert("SENSOR_WARN")
