@@ -97,6 +97,7 @@ ecarsafetysense/
 ├── safety_sense.py              # โค้ดหลัก
 ├── config.json                  # ตั้งค่าทั้งหมด (แก้ที่นี่)
 ├── install.sh                   # ติดตั้งครั้งเดียวจบ
+├── setup_wifi_time.sh           # Wi-Fi Auto_ECar + ซิงก์เวลา
 ├── safety_sense.service         # systemd unit file
 ├── safety_sense_monitor.desktop # VNC terminal popup autostart
 └── readme.md                    # ไฟล์นี้
@@ -216,6 +217,34 @@ sudo reboot
 IP ของ `eth0` บน LAN ตรงใช้รูปแบบ `192.168.0.(10+NNN)` คือ คัน 1 เป็น `192.168.0.11` คัน 2 เป็น `192.168.0.12` และคัน 3 เป็น `192.168.0.13`
 
 การเปลี่ยนชื่อผู้ใช้บน Pi ที่ติดตั้งแล้วต้องทำแยกจากการตั้ง hostname ต้องเปลี่ยนไฟล์ sudo (`/etc/sudoers.d/`), autologin (`lightdm.conf` และ `getty@tty1`), `subuid`/`subgid` และย้ายโฟลเดอร์ home ไปพร้อมกัน
+
+---
+
+## Wi-Fi และเวลาเครื่อง
+
+Raspberry Pi 4 ไม่มีนาฬิกาที่มีแบตเตอรี่ ถ้าตัดไฟ เวลาจะย้อนไปเป็นเวลาล่าสุดที่บันทึกไว้ ทำให้เวลาใน log ผิด ให้ตั้ง Wi-Fi `Auto_ECar` ไว้ทุกคัน เพื่อให้ Pi เชื่อมต่อเองและซิงก์เวลาจากอินเทอร์เน็ตทุกครั้งที่อยู่ในระยะ
+
+```bash
+cd ~/ecarsafetysense
+sudo bash setup_wifi_time.sh
+```
+
+สคริปต์จะ
+- ตั้งประเทศ Wi-Fi เป็น TH และเปิด Wi-Fi
+- บันทึกโปรไฟล์ `Auto_ECar` แบบเชื่อมต่ออัตโนมัติ (รหัสผ่านอยู่ในสคริปต์)
+- ติดตั้งตัวสแกน Wi-Fi ทุก 15 วินาทีขณะที่ยังไม่ได้เชื่อมต่อ
+- เปิด NTP และสั่งซิงก์เวลาทันทีที่เชื่อม Wi-Fi ได้
+
+ทดสอบด้วย hotspot มือถือชื่อเดียวกัน: ใช้เวลาประมาณ 10 วินาทีตั้งแต่ Wi-Fi เข้าระยะจนเวลาเครื่องถูกต้อง ถ้าเปิดเครื่องนอกระยะ Wi-Fi เวลาจะยังผิดจนกว่าจะได้เชื่อมต่อ
+
+รันซ้ำได้ ใช้กับ Wi-Fi อื่น: `sudo WIFI_PSK='รหัส' bash setup_wifi_time.sh ชื่อWiFi`
+
+ตรวจสถานะ:
+
+```bash
+timedatectl | grep -E "Local time|synchronized"
+iwgetid -r
+```
 
 ---
 
