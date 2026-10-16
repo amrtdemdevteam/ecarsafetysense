@@ -21,11 +21,9 @@
   },
 
   "buzzer": {
-    "_comment": "ความถี่คงที่ของแต่ละ zone; config ปัจจุบันปิด NEAR เพราะ mid_cm == near_cm",
+    "_comment": "ความถี่คงที่ของ FAR และ MID; SOLID ดังต่อเนื่อง; จังหวะเปิด/ปิดเท่ากัน (50%) กำหนดในโค้ด",
     "freq_far_hz":  2.0,
-    "freq_mid_hz":  6.0,
-    "freq_near_hz": 6.0,
-    "duty_cycle_pct": 50
+    "freq_mid_hz":  6.0
   },
 
   "sensor": {
@@ -60,12 +58,18 @@
 
   "watchdog": {
     "timeout_sec": 10.0,
-    "_comment": "เพิ่มจาก 3 → 5 วิ เพราะ frame rate ลดเหลือ 10Hz"
+    "_comment": "ไม่มีเฟรมที่ใช้ได้นานเท่านี้ → SENSOR_FAIL (เสียงปี๊บ 3 ครั้งซ้ำ)"
   },
 
   "startup": {
-    "hold_tone_until_ready": true,
-    "_comment": "เปิดเครื่องแล้ว buzzer ดังยาวจนกว่าจะได้ค่าจาก sensor ครั้งแรก (false = ปี๊บสั้นแบบเดิม)"
+    "boot_tone": true,
+    "boot_tone_mode": "from_power",
+    "boot_tone_sec": 5,
+    "_comment_boot": "from_power = ดังทันทีที่ไฟเข้า แล้วหยุดเร็วที่สุดที่ Linux ทำได้ (ประมาณ 6-9 วินาทีหลังไฟเข้า แล้วแต่เครื่อง; boot_tone_sec ไม่ใช้). fixed = เริ่มดังเมื่อ Linux เริ่มบูต ดังนาน boot_tone_sec วินาทีพอดี. แก้แล้วรัน sudo bash install.sh และ reboot",
+    "fast_boot_eeprom": true,
+    "_comment_eeprom": "install.sh ตั้ง EEPROM ให้บูตเร็ว (NET_INSTALL_AT_POWER_ON=0, DISABLE_HDMI=1, BOOT_UART=0) เสียงเริ่มเร็วขึ้น; สำรองค่าเดิมไว้ที่ /var/lib/safety_sense/",
+    "ready_beep": true,
+    "_comment_ready": "ระบบพร้อม (ได้ค่าจาก sensor ครั้งแรก) ปี๊บสั้น 1 ครั้ง"
   },
 
   "health": {

@@ -89,11 +89,9 @@ def validate_config() -> None:
     check(isinstance(retain, int) and retain >= 1, "log retention is at least one day")
     check(is_number(log_check) and log_check > 0, "log maintenance interval is positive")
 
-    buzzer_keys = ("freq_far_hz", "freq_mid_hz", "freq_near_hz")
+    buzzer_keys = ("freq_far_hz", "freq_mid_hz")
     frequencies = [nested(config, "buzzer", key) for key in buzzer_keys]
-    duty = nested(config, "buzzer", "duty_cycle_pct")
     check(all(is_number(value) and value > 0 for value in frequencies), "configured buzzer frequencies are positive")
-    check(is_number(duty) and 0 < duty <= 100, "buzzer duty cycle is in (0, 100]")
 
 
 def validate_files() -> None:
