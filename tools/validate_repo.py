@@ -101,6 +101,8 @@ def validate_files() -> None:
         "install.sh",
         "safety_sense.service",
         "safety_sense_monitor.desktop",
+        "fastboot.sh",
+        "setup_wifi_time.sh",
     )
     for name in required:
         check((ROOT / name).is_file(), f"required deployment file exists: {name}")
@@ -153,6 +155,9 @@ def validate_shell() -> None:
         check=False,
     )
     check(syntax.returncode == 0, f"install.sh passes bash -n{': ' + syntax.stderr.strip() if syntax.stderr.strip() else ''}")
+    for script in ("fastboot.sh", "setup_wifi_time.sh"):
+        result = subprocess.run([bash, "-n", str(ROOT / script)], capture_output=True, text=True, env=shell_env, check=False)
+        check(result.returncode == 0, f"{script} passes bash -n{': ' + result.stderr.strip() if result.stderr.strip() else ''}")
 
     if os.name == "nt":
         shell_env["PYTHON_BIN"] = sys.executable
