@@ -1,6 +1,6 @@
 [Unit]
 Description=E-car Safety Sense — KURURU2 proximity alert
-After=local-fs.target
+After=local-fs.target safety_sense_boottone.service
 
 [Service]
 Type=simple

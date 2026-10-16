@@ -9,9 +9,9 @@
 
 | ชิ้นส่วน | รุ่น |
 |---|---|
-| Controller | Raspberry Pi 4 หรือ Raspberry Pi 5 |
+| Controller | Raspberry Pi 4 Model B (คัน 001 เท่านั้นที่เป็น Raspberry Pi 5) |
 | Sensor | Benewake TFmini Plus or TF-NOVA (UART, standard 9-byte frame) |
-| Buzzer | Active piezo 95dB 3–24V via MOSFET |
+| Buzzer | TEND TS2BCL7 24V (มีไฟ LED, 90 dB ขึ้นไป) ขับผ่าน MOSFET |
 | GPIO library | lgpio (รองรับ Raspberry Pi 4 และ Raspberry Pi 5) |
 
 ### การต่อขา
@@ -55,7 +55,8 @@ NEAR          disabled (mid_cm == near_cm == 105)
 |---|---|---|
 | SENSOR_WARN | beep-beep ... หยุด | เลนส์สกปรก / สัญญาณอ่อน |
 | SENSOR_FAIL | beep-beep-beep ... หยุด | sensor ไม่ส่งข้อมูล (ขาด / พัง) |
-| STARTUP | ดังยาวตั้งแต่เปิดเครื่อง | ระบบยังไม่พร้อม หยุดดังเมื่อได้ค่าจาก sensor ครั้งแรก |
+| STARTUP | ดังยาวตั้งแต่บิดกุญแจ แล้วหยุดเอง (Pi 4 ที่ตั้งค่าบูตเร็วครบ: ดังวินาทีที่ 2 หยุดวินาทีที่ 7) | ไฟเข้าและ buzzer ใช้งานได้ ระบบยังไม่พร้อม |
+| READY | ปี๊บสั้น 1 ครั้ง | ระบบพร้อม (ได้ค่าจาก sensor ครั้งแรก) ออกรถได้ |
 
 ---
 
@@ -84,9 +85,29 @@ sudo bash install.sh
 
 เมื่อ UART พร้อมแล้ว `install.sh` จะ:
 - ติดตั้ง Python packages (`python3-serial`, `python3-lgpio`)
-- copy ไฟล์ไปที่ `/opt/safety_sense/`
+- copy ไฟล์ไปที่ `/opt/safety_sense/` (ถ้า `config.json` เดิมในเครื่องต่างจากใน repo จะสำรองไว้เป็น `config.json.bak-วันเวลา` ก่อนเขียนทับ)
+- เสียงตอนเปิดเครื่อง (`startup.boot_tone_mode = from_power`): เพิ่ม `gpio=23=op,dh` ใน config.txt ให้ดังทันทีที่ไฟเข้า แล้ว `safety_sense_boottone.service` ปิดเสียงเร็วที่สุดที่ Linux ทำได้ (วัดจริงหลังตั้ง EEPROM: Pi 4 ดังวินาทีที่ 2 หยุดวินาทีที่ 11, Pi 5 คัน 001 ดังวินาทีที่ 4 หยุดวินาทีที่ 9) หรือเลือก `fixed` ให้ดังนาน `boot_tone_sec` พอดีแต่เริ่มดังช้ากว่าไฟเข้า มีผลหลัง reboot (ต้องมีคำสั่ง `pinctrl` จากแพ็กเกจ `raspi-utils`)
+- ตั้ง EEPROM ให้บูตเร็ว (`NET_INSTALL_AT_POWER_ON=0`, `DISABLE_HDMI=1`, `BOOT_UART=0`) ถ้ายังไม่ได้ตั้ง และสำรองค่าเดิมไว้ที่ `/var/lib/safety_sense/` ปิดได้ด้วย `startup.fast_boot_eeprom = false` บน Pi 4 จะเขียน EEPROM ตอน reboot ครั้งถัดไป ห้ามตัดไฟระหว่าง reboot นั้น (คัน 001 Pi 5: เสียงเริ่มจากวินาทีที่ 9 เหลือ 4, คัน 003 Pi 4: จากวินาทีที่ 8 เหลือ 2)
 - ลง systemd service (autostart + restart on crash)
 - ลง VNC terminal monitor (popup log อัตโนมัติตอนบูต)
+
+### บูตเร็วขึ้นอีก (ทดลอง, Pi 4 เท่านั้น)
+
+`fastboot_trial.sh` ทำให้เสียงตอนเปิดเครื่องหยุดเร็วขึ้นอีก ยังไม่อยู่ใน `install.sh` ทดสอบแล้วบนคัน 003 วันที่ 2026-10-16: เสียงดังวินาทีที่ 2 หยุดวินาทีที่ 7 ปี๊บพร้อมวินาทีที่ 13 (ก่อนหน้า 2 / 11 / 15) และเสียงตามโซนยังทำงานปกติ
+
+```bash
+sudo bash fastboot_trial.sh apply    # แล้ว sudo reboot
+sudo bash fastboot_trial.sh status   # หลัง reboot ต้องเห็น released และ GPIO init OK (lgpio)
+sudo bash fastboot_trial.sh revert   # ถอดออก แล้ว sudo reboot
+```
+
+สิ่งที่สคริปต์ทำ:
+- `auto_initramfs=0` ไม่โหลด initramfs จาก SD
+- `initial_turbo=30` CPU ความเร็วสูงสุด 30 วินาทีแรก
+- `dtoverlay=gpio-led,gpio=23,label=ssbuzz` ให้ kernel ปิดขา 23 เองเร็วกว่ารอ systemd (เฉพาะ Pi 4)
+- `safety-sense-buzzrelease` (ExecStartPre ของ safety_sense) คืนขา 23 จาก kernel ให้ lgpio ก่อนโปรแกรมเริ่ม
+
+สำรอง config.txt ไว้ที่ `/boot/firmware/config.txt.before-fastboot` ถ้าบูตไม่ขึ้น ให้เอา SD ไปเสียบคอม แล้วก๊อปไฟล์นี้ทับ `config.txt` ในไดรฟ์ bootfs
 
 ---
 
@@ -98,6 +119,7 @@ ecarsafetysense/
 ├── config.json                  # ตั้งค่าทั้งหมด (แก้ที่นี่)
 ├── install.sh                   # ติดตั้งครั้งเดียวจบ
 ├── setup_wifi_time.sh           # Wi-Fi Auto_ECar + ซิงก์เวลา
+├── fastboot_trial.sh            # ทดลองบูตเร็ว (Pi 4)
 ├── safety_sense.service         # systemd unit file
 ├── safety_sense_monitor.desktop # VNC terminal popup autostart
 └── readme.md                    # ไฟล์นี้
@@ -128,9 +150,7 @@ ecarsafetysense/
 },
 "buzzer": {
     "freq_far_hz":  2.0,
-    "freq_mid_hz":  6.0,
-    "freq_near_hz": 6.0,
-    "duty_cycle_pct": 50
+    "freq_mid_hz":  6.0
 }
 ```
 
@@ -139,6 +159,8 @@ ecarsafetysense/
 ```bash
 sudo systemctl restart safety_sense
 ```
+
+ถ้าแก้ค่าใน `/opt/safety_sense/config.json` ของคันใดคันหนึ่ง ค่านั้นจะถูกเขียนทับเมื่อรัน `install.sh` ครั้งถัดไป installer จะสำรองไฟล์เดิมไว้ให้ แต่ค่าที่ต้องการใช้ทุกคันควรแก้ใน `config.json` ของ repo
 
 ---
 
@@ -233,7 +255,7 @@ sudo bash setup_wifi_time.sh
 - ตั้งประเทศ Wi-Fi เป็น TH และเปิด Wi-Fi
 - บันทึกโปรไฟล์ `Auto_ECar` แบบเชื่อมต่ออัตโนมัติ (รหัสผ่านอยู่ในสคริปต์)
 - ติดตั้งตัวสแกน Wi-Fi ทุก 15 วินาทีขณะที่ยังไม่ได้เชื่อมต่อ
-- เปิด NTP และสั่งซิงก์เวลาทันทีที่เชื่อม Wi-Fi ได้
+- เปิด NTP และสั่งซิงก์เวลาทันทีที่เชื่อม Wi-Fi ได้ (ข้าม eth0 และปลดเพดานการ restart ของ timesyncd ไม่ให้ค้างสถานะ failed ตอนบูต)
 
 ทดสอบด้วย hotspot มือถือชื่อเดียวกัน: ใช้เวลาประมาณ 10 วินาทีตั้งแต่ Wi-Fi เข้าระยะจนเวลาเครื่องถูกต้อง ถ้าเปิดเครื่องนอกระยะ Wi-Fi เวลาจะยังผิดจนกว่าจะได้เชื่อมต่อ
 
@@ -258,6 +280,23 @@ git push origin master
 cd ~/ecarsafetysense
 git pull
 sudo bash install.sh
+```
+
+ถ้า Pi ไม่มีอินเทอร์เน็ต (ต่อแค่สาย LAN) ให้คัดลอกโค้ดจากคอมแทน `git pull` แล้วรัน installer:
+
+```bash
+# บน Pi — เก็บโฟลเดอร์เดิมไว้ก่อน
+mv ~/ecarsafetysense ~/ecarsafetysense-old
+```
+
+```cmd
+:: บน Windows — NNN คือเลขคัน
+scp -r C:\TPCAP_SAFETYSENSE\01_CODE\ecarsafetysense ecarsafetysense-NNN@192.168.0.(10+NNN):/home/ecarsafetysense-NNN/
+```
+
+```bash
+# บน Pi
+cd ~/ecarsafetysense && git log --oneline -1 && sudo bash install.sh
 ```
 
 ---

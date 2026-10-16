@@ -209,15 +209,28 @@ class ZoneFilterTests(unittest.TestCase):
 
 
 class StartupToneTests(unittest.TestCase):
-    def test_hold_starts_buzzer_on_without_startup_beep(self):
+    def test_buzzer_starts_silent_without_startup_beep(self):
         with mock.patch.object(RUNTIME.threading, "Thread"), mock.patch.object(RUNTIME, "gpio_write") as write:
-            buzzer = RUNTIME.BuzzerController(hold=True)
-        self.assertEqual(buzzer._target_freq, buzzer._SOLID)
+            buzzer = RUNTIME.BuzzerController()
+        self.assertEqual(buzzer._target_freq, buzzer._SILENT)
         write.assert_not_called()
 
-    def test_config_enables_startup_hold(self):
-        self.assertTrue(CONFIG["startup"]["hold_tone_until_ready"])
-        self.assertTrue(RUNTIME.HOLD_UNTIL_READY)
+    def test_ready_beep_is_one_shot_and_keeps_zone_target(self):
+        with mock.patch.object(RUNTIME.threading, "Thread"):
+            buzzer = RUNTIME.BuzzerController()
+        buzzer.update(150)
+        buzzer.beep_once()
+        self.assertEqual(buzzer._oneshot, 0.15)
+        self.assertEqual(buzzer._target_freq, RUNTIME.FREQ_MID)
+
+    def test_config_enables_boot_tone_and_ready_beep(self):
+        self.assertTrue(CONFIG["startup"]["boot_tone"])
+        self.assertTrue(CONFIG["startup"]["ready_beep"])
+        self.assertEqual(CONFIG["startup"]["boot_tone_sec"], 5)
+        self.assertEqual(CONFIG["startup"]["boot_tone_mode"], "from_power")
+        self.assertTrue(CONFIG["startup"]["fast_boot_eeprom"])
+        self.assertNotIn("hold_tone_until_ready", CONFIG["startup"])
+        self.assertTrue(RUNTIME.READY_BEEP)
 
 
 if __name__ == "__main__":

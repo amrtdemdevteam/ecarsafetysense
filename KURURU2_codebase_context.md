@@ -340,7 +340,7 @@ scp file.py "ecarsafetysense@[fe80::88fe:4df:ffb4:1555%15]:/home/ecarsafetysense
 ### SSH Info
 - **IP:** 192.168.50.50 (WiFi) หรือ fe80::88fe:4df:ffb4:1555 (LAN direct)
 - **User:** ecarsafetysense
-- **Password:** 123456789
+- **Password:** ไม่เก็บในเอกสาร (เคยมีรหัสผ่านอยู่ที่นี่ ให้เปลี่ยนรหัสที่เครื่องแล้ว)
 
 ### systemd Commands
 ```bash

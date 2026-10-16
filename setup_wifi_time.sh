@@ -95,16 +95,32 @@ cat > /etc/systemd/timesyncd.conf.d/safety_sense.conf <<'EOF'
 NTP=time.google.com th.pool.ntp.org
 FallbackNTP=pool.ntp.org time.cloudflare.com
 EOF
-# Sync right away each time a network comes up, instead of waiting for the next poll.
+# Several network events arrive together at boot. Without this drop-in the repeated
+# restarts hit systemd's start limit and timesyncd stays "failed" until the next boot.
+mkdir -p /etc/systemd/system/systemd-timesyncd.service.d
+cat > /etc/systemd/system/systemd-timesyncd.service.d/safety_sense.conf <<'EOF'
+[Unit]
+StartLimitIntervalSec=0
+[Service]
+Restart=on-failure
+RestartSec=5
+EOF
+systemctl daemon-reload
+# Sync right away when Wi-Fi comes up, instead of waiting for the next poll.
+# eth0 is the offline direct LAN, so it is skipped.
 cat > /etc/NetworkManager/dispatcher.d/90-safety-sense-timesync <<'EOF'
 #!/bin/sh
+case "$1" in lo|eth*) exit 0 ;; esac
 case "$2" in
-  up|connectivity-change) systemctl restart systemd-timesyncd ;;
+  up|connectivity-change)
+    systemctl reset-failed systemd-timesyncd 2>/dev/null
+    systemctl restart systemd-timesyncd ;;
 esac
 EOF
 chmod 755 /etc/NetworkManager/dispatcher.d/90-safety-sense-timesync
 timedatectl set-timezone Asia/Bangkok
 timedatectl set-ntp true
+systemctl reset-failed systemd-timesyncd 2>/dev/null || true
 systemctl restart systemd-timesyncd
 
 echo "[5/6] Connect now"

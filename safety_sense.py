@@ -50,8 +50,6 @@ ZONE_NEAR  = CFG["zones"]["near_cm"]
 
 FREQ_FAR   = CFG["buzzer"]["freq_far_hz"]
 FREQ_MID   = CFG["buzzer"]["freq_mid_hz"]
-FREQ_NEAR  = CFG["buzzer"]["freq_near_hz"]
-DUTY       = CFG["buzzer"]["duty_cycle_pct"]
 
 MEDIAN_WINDOW    = CFG["sensor"]["median_window"]
 MIN_DIST_CM      = CFG["sensor"]["min_dist_cm"]
@@ -70,7 +68,10 @@ LOG_MAX_MB      = CFG["log"]["max_mb"]
 LOG_RETAIN_DAYS = CFG["log"]["retain_days"]
 LOG_CHECK_EVERY = CFG["log"]["check_every_sec"]
 
-HOLD_UNTIL_READY = bool(CFG.get("startup", {}).get("hold_tone_until_ready", False))
+# Boot tone (about 5 s from power-on) is handled outside Python: config.txt drives GPIO
+# HIGH at firmware start and safety_sense_boottone.service drives it LOW early in boot.
+# This process only gives one short beep when the first valid frame arrives.
+READY_BEEP = bool(CFG.get("startup", {}).get("ready_beep", True))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logger
@@ -492,12 +493,16 @@ class BuzzerController:
     _WARN_PAT = -2.0
     _FAIL_PAT = -3.0
 
-    def __init__(self, hold: bool = False):
-        self._target_freq = self._SOLID if hold else self._SILENT
+    def __init__(self):
+        self._target_freq = self._SILENT
+        self._oneshot     = 0.0
         self._lock        = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
-        if not hold:
-            self._startup_beep()
+
+    def beep_once(self, dur: float = 0.15):
+        """One short beep, played before the current pattern continues."""
+        with self._lock:
+            self._oneshot = dur
 
     def update(self, dist_cm: int):
         freq = interpolate_freq(dist_cm)
@@ -525,6 +530,13 @@ class BuzzerController:
         while True:
             with self._lock:
                 freq = self._target_freq
+                oneshot, self._oneshot = self._oneshot, 0.0
+
+            if oneshot:
+                gpio_write(0)
+                time.sleep(0.1)
+                self._pulse(oneshot)
+                continue
 
             if freq == self._SILENT:
                 gpio_write(0)
@@ -559,12 +571,6 @@ class BuzzerController:
         while time.monotonic() < end:
             time.sleep(0.02)
 
-    def _startup_beep(self):
-        time.sleep(0.3)
-        gpio_write(1)
-        time.sleep(0.15)
-        gpio_write(0)
-        log.info("Startup beep ✓")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rolling median
@@ -583,20 +589,20 @@ def main():
     log_platform_info()
 
     try:
-        gpio_init(1 if HOLD_UNTIL_READY else 0)
+        gpio_init(0)
         sensor = TFminiPlus()
     except (OSError, serial.SerialException) as exc:
         log.error(f"Hardware initialization failed: {exc}")
         gpio_cleanup()
         sys.exit(1)
 
-    buzzer   = BuzzerController(hold=HOLD_UNTIL_READY)
+    buzzer   = BuzzerController()
     watchdog = Watchdog(WATCHDOG_TIMEOUT)
     health   = SensorHealth()
     logmgr   = LogManager()
     zfilter  = ZoneFilter(HYSTERESIS_FRAMES, MIN_HOLD_SEC)
     samples  = []
-    ready    = not HOLD_UNTIL_READY
+    ready    = False
     t_start  = time.monotonic()
 
     def shutdown(sig, frame):
@@ -613,7 +619,7 @@ def main():
         f"Zones (cm): CLEAR>{ZONE_CLEAR}  FAR>{ZONE_FAR}  "
         f"MID>{ZONE_MID}  NEAR>{ZONE_NEAR}  SOLID≤{ZONE_NEAR}"
     )
-    log.info(f"Freq anchors: FAR={FREQ_FAR}Hz  MID={FREQ_MID}Hz  NEAR={FREQ_NEAR}Hz")
+    log.info(f"Freq anchors: FAR={FREQ_FAR}Hz  MID={FREQ_MID}Hz")
     log.info(f"Filter: hysteresis={HYSTERESIS_FRAMES} frames  min_hold={MIN_HOLD_SEC}s  frame_rate={FRAME_RATE_HZ}Hz")
 
     while True:
@@ -636,7 +642,9 @@ def main():
                 continue
             ready = True
             logmgr.write({"event": "READY", "after_sec": round(time.monotonic() - t_start, 1)})
-            log.info("System ready — startup tone OFF")
+            if READY_BEEP:
+                buzzer.beep_once()
+            log.info("System ready — ready beep")
 
         if health_status == "SENSOR_WARN":
             buzzer.set_alert("SENSOR_WARN")
