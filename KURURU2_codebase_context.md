@@ -1,9 +1,9 @@
 # E-car Safety Sense — KURURU2
 ## Codebase Context for GitHub Copilot
 
-> **วันที่อัปเดต:** 9 กันยายน 2026
+> **วันที่อัปเดต:** 16 ตุลาคม 2026 (config และสถานะคัน; ส่วนอื่นเป็นบริบทเดิม 9 ก.ย. 2026)
 > **Repository:** https://github.com/amrtdemdevteam/ecarsafetysense  
-> **Status:** Pilot — ติดตั้งบนรถคันแรก ทดสอบในโรงงานจริงแล้ว  
+> **Status:** Pilot — 3 คัน (001 Pi 5, 002–003 Pi 4) รัน master `3dbc66d` + fast-boot trial (16 ต.ค. 2026); ยังไม่ใช่ production release  
 
 ---
 
@@ -100,22 +100,31 @@ pip install pyserial lgpio --break-system-packages
   },
   "zones": {
     "clear_cm": 200,
-    "far_cm":   155,
-    "mid_cm":   105,
-    "near_cm":  105
+    "far_cm": 155,
+    "mid_cm": 105,
+    "near_cm": 105
   },
   "buzzer": {
-    "freq_far_hz":  2.0,
-    "freq_mid_hz":  6.0,
-    "freq_near_hz": 6.0,
-    "duty_cycle_pct": 50
+    "freq_far_hz": 2.0,
+    "freq_mid_hz": 6.0
   },
   "sensor": {
-    "median_window":  3,
-    "min_dist_cm":    10,
-    "max_dist_cm":    200,
-    "min_strength":   0,
-    "frame_rate_hz":  10
+    "profile": "auto",
+    "distance_unit": "cm",
+    "force_output_unit": "cm",
+    "profiles": {
+      "tfmini_plus": {
+        "distance_unit": "cm"
+      },
+      "tf_nova": {
+        "distance_unit": "cm"
+      }
+    },
+    "median_window": 3,
+    "min_dist_cm": 10,
+    "max_dist_cm": 200,
+    "min_strength": 0,
+    "frame_rate_hz": 10
   },
   "filter": {
     "hysteresis_frames": 5,
@@ -123,6 +132,13 @@ pip install pyserial lgpio --break-system-packages
   },
   "watchdog": {
     "timeout_sec": 10.0
+  },
+  "startup": {
+    "boot_tone": true,
+    "boot_tone_mode": "from_power",
+    "boot_tone_sec": 5,
+    "fast_boot_eeprom": true,
+    "ready_beep": true
   },
   "health": {
     "fail_count_threshold": 999999
@@ -135,6 +151,8 @@ pip install pyserial lgpio --break-system-packages
   }
 }
 ```
+
+> ตัดคอมเมนต์ (`_comment*`) ออกจากตัวอย่างนี้ ค่าจริงอยู่ที่ `config.json` (master `3dbc66d`). `freq_near_hz`, `duty_cycle_pct` และ `startup.hold_tone_until_ready` เลิกใช้แล้ว
 
 ---
 
