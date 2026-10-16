@@ -88,24 +88,26 @@ sudo bash install.sh
 - copy ไฟล์ไปที่ `/opt/safety_sense/` (ถ้า `config.json` เดิมในเครื่องต่างจากใน repo จะสำรองไว้เป็น `config.json.bak-วันเวลา` ก่อนเขียนทับ)
 - เสียงตอนเปิดเครื่อง (`startup.boot_tone_mode = from_power`): เพิ่ม `gpio=23=op,dh` ใน config.txt ให้ดังทันทีที่ไฟเข้า แล้ว `safety_sense_boottone.service` ปิดเสียงเร็วที่สุดที่ Linux ทำได้ (วัดจริงหลังตั้ง EEPROM: Pi 4 ดังวินาทีที่ 2 หยุดวินาทีที่ 11, Pi 5 คัน 001 ดังวินาทีที่ 4 หยุดวินาทีที่ 9) หรือเลือก `fixed` ให้ดังนาน `boot_tone_sec` พอดีแต่เริ่มดังช้ากว่าไฟเข้า มีผลหลัง reboot (ต้องมีคำสั่ง `pinctrl` จากแพ็กเกจ `raspi-utils`)
 - ตั้ง EEPROM ให้บูตเร็ว (`NET_INSTALL_AT_POWER_ON=0`, `DISABLE_HDMI=1`, `BOOT_UART=0`) ถ้ายังไม่ได้ตั้ง และสำรองค่าเดิมไว้ที่ `/var/lib/safety_sense/` ปิดได้ด้วย `startup.fast_boot_eeprom = false` บน Pi 4 จะเขียน EEPROM ตอน reboot ครั้งถัดไป ห้ามตัดไฟระหว่าง reboot นั้น (คัน 001 Pi 5: เสียงเริ่มจากวินาทีที่ 9 เหลือ 4, คัน 003 Pi 4: จากวินาทีที่ 8 เหลือ 2)
+- บูตเร็ว (`startup.fast_boot_kernel`): รัน `fastboot.sh apply` ให้เสียงหยุดเร็วขึ้นอีก (ดูหัวข้อถัดไป)
 - ลง systemd service (autostart + restart on crash)
 - ลง VNC terminal monitor (popup log อัตโนมัติตอนบูต)
 
-### บูตเร็วขึ้นอีก (ทดลอง, Pi 4 เท่านั้น)
+### บูตเร็วขึ้นอีก (`fastboot.sh`, รันโดย install.sh)
 
-`fastboot_trial.sh` ทำให้เสียงตอนเปิดเครื่องหยุดเร็วขึ้นอีก ยังไม่อยู่ใน `install.sh` ทดสอบแล้วบนคัน 003 วันที่ 2026-10-16: เสียงดังวินาทีที่ 2 หยุดวินาทีที่ 7 ปี๊บพร้อมวินาทีที่ 13 (ก่อนหน้า 2 / 11 / 15) และเสียงตามโซนยังทำงานปกติ
+เมื่อ `startup.fast_boot_kernel = true` (ค่าเริ่มต้น) และ `boot_tone_mode = from_power` ตัว `install.sh` จะรัน `fastboot.sh apply` ให้เอง มีผลหลัง reboot ตั้ง `fast_boot_kernel = false` แล้วรัน `install.sh` อีกรอบเพื่อถอดออก
 
-```bash
-sudo bash fastboot_trial.sh apply    # แล้ว sudo reboot
-sudo bash fastboot_trial.sh status   # หลัง reboot ต้องเห็น released และ GPIO init OK (lgpio)
-sudo bash fastboot_trial.sh revert   # ถอดออก แล้ว sudo reboot
-```
+ผลวัดจริง 2026-10-16 (บิดกุญแจ → เสียงเริ่ม / เสียงหยุด / ปี๊บพร้อม): Pi 4 คัน 002, 003 = 2 / 7 / 13–14 s (EEPROM อย่างเดียว 2 / 11 / 15), Pi 5 คัน 001 = 4 / 8 / 11 s (เดิม 4 / 9 / 13)
 
 สิ่งที่สคริปต์ทำ:
-- `auto_initramfs=0` ไม่โหลด initramfs จาก SD
+- `auto_initramfs=0` ไม่โหลด initramfs จาก SD (ทำเฉพาะเมื่อ root เป็น partition ธรรมดา `root=PARTUUID=...` และไม่มี `/etc/crypttab`)
 - `initial_turbo=30` CPU ความเร็วสูงสุด 30 วินาทีแรก
 - `dtoverlay=gpio-led,gpio=23,label=ssbuzz` ให้ kernel ปิดขา 23 เองเร็วกว่ารอ systemd (เฉพาะ Pi 4)
 - `safety-sense-buzzrelease` (ExecStartPre ของ safety_sense) คืนขา 23 จาก kernel ให้ lgpio ก่อนโปรแกรมเริ่ม
+
+```bash
+sudo bash fastboot.sh status   # หลัง reboot ต้องเห็น released (Pi 4) และ GPIO init OK (lgpio)
+sudo bash fastboot.sh revert   # ถอดเอง แล้ว sudo reboot
+```
 
 สำรอง config.txt ไว้ที่ `/boot/firmware/config.txt.before-fastboot` ถ้าบูตไม่ขึ้น ให้เอา SD ไปเสียบคอม แล้วก๊อปไฟล์นี้ทับ `config.txt` ในไดรฟ์ bootfs
 
@@ -119,7 +121,7 @@ ecarsafetysense/
 ├── config.json                  # ตั้งค่าทั้งหมด (แก้ที่นี่)
 ├── install.sh                   # ติดตั้งครั้งเดียวจบ
 ├── setup_wifi_time.sh           # Wi-Fi Auto_ECar + ซิงก์เวลา
-├── fastboot_trial.sh            # ทดลองบูตเร็ว (Pi 4)
+├── fastboot.sh                  # บูตเร็ว (install.sh เรียกให้)
 ├── safety_sense.service         # systemd unit file
 ├── safety_sense_monitor.desktop # VNC terminal popup autostart
 └── readme.md                    # ไฟล์นี้

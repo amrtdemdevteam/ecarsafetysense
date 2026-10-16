@@ -3,7 +3,7 @@
 
 > **วันที่อัปเดต:** 16 ตุลาคม 2026 (config และสถานะคัน; ส่วนอื่นเป็นบริบทเดิม 9 ก.ย. 2026)
 > **Repository:** https://github.com/amrtdemdevteam/ecarsafetysense  
-> **Status:** Pilot — 3 คัน (001 Pi 5, 002–003 Pi 4) รัน master `3dbc66d` + fast-boot trial (16 ต.ค. 2026); ยังไม่ใช่ production release  
+> **Status:** Pilot — 3 คัน (001 Pi 5, 002–003 Pi 4) รัน master `3dbc66d` + fast boot (16 ต.ค. 2026; ตั้งแต่ commit ถัดไป fast boot อยู่ใน install.sh); ยังไม่ใช่ production release
 
 ---
 
@@ -138,6 +138,7 @@ pip install pyserial lgpio --break-system-packages
     "boot_tone_mode": "from_power",
     "boot_tone_sec": 5,
     "fast_boot_eeprom": true,
+    "fast_boot_kernel": true,
     "ready_beep": true
   },
   "health": {

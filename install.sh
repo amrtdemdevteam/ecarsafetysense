@@ -74,7 +74,7 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-for source_file in safety_sense.py config.json safety_sense.service safety_sense_monitor.desktop; do
+for source_file in safety_sense.py config.json safety_sense.service safety_sense_monitor.desktop fastboot.sh; do
   if [[ ! -f "$SCRIPT_DIR/$source_file" ]]; then
     echo "ERROR: ไม่พบไฟล์ $SCRIPT_DIR/$source_file" >&2
     exit 1
@@ -322,6 +322,24 @@ if [[ "$FAST_EEPROM" == "1" ]]; then
     fi
     rm -rf "$EE_TMP"
   fi
+fi
+
+read -r FAST_KERNEL < <("${PYTHON_BIN:-python3}" - "$INSTALL_DIR/config.json" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1], encoding="utf-8"))
+print(int(bool(c.get("startup", {}).get("fast_boot_kernel", True))))
+PY
+)
+FASTBOOT_MARK="# >>> safety_sense fastboot"
+if [[ "$FAST_KERNEL" == "1" && "$BOOT_TONE" == "1" && "$BOOT_TONE_MODE" == "from_power" && -n "$BOOT_CONFIG" ]]; then
+  if bash "$SCRIPT_DIR/fastboot.sh" apply | sed 's/^/    /'; then
+    echo "    ✓ fast boot: เสียงตอนเปิดเครื่องหยุดเร็วขึ้น — มีผลหลัง reboot"
+  else
+    echo "    ! fast boot ไม่สำเร็จ — ระบบยังใช้งานได้ แค่เสียงหยุดช้ากว่า"
+  fi
+elif [[ -n "$BOOT_CONFIG" ]] && grep -qF "$FASTBOOT_MARK" "$BOOT_CONFIG"; then
+  bash "$SCRIPT_DIR/fastboot.sh" revert | sed 's/^/    /' || true
+  echo "    ✓ ถอด fast boot (startup.fast_boot_kernel = false หรือไม่ใช่ mode from_power) — มีผลหลัง reboot"
 fi
 
 echo "[6/7] ลงทะเบียน systemd service..."
